@@ -6,6 +6,7 @@ active fire data and visualizing the 25-year 'Burning Activity Calendar'.
 
 import sys
 import os
+os.environ["LOKY_MAX_CPU_COUNT"] = "1"
 import json
 from typing import Dict, Any, Optional
 
@@ -430,9 +431,28 @@ def index():
         title: { text: title, font: { color: '#e2e8f0', size: 14 } },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        margin: { l: 50, r: 20, t: 40, b: 40 },
-        xaxis: { title: { text: 'Day of Year (1 - 365)', font: { color: '#9ca3af', size: 12 } }, tickfont: { color: '#9ca3af' }, gridcolor: '#1f2937' },
-        yaxis: { title: { text: 'Year', font: { color: '#9ca3af', size: 12 } }, tickfont: { color: '#9ca3af' }, gridcolor: '#1f2937' }
+        margin: { l: 60, r: 20, t: 40, b: 45 },
+        xaxis: {
+          title: { text: 'Day of Year (1 - 365)', font: { color: '#9ca3af', size: 12 } },
+          tickmode: 'linear',
+          tick0: 1,
+          dtick: 30,
+          range: [1, 365],
+          fixedrange: true,
+          tickfont: { color: '#9ca3af' },
+          gridcolor: '#1f2937'
+        },
+        yaxis: {
+          title: { text: 'Year', font: { color: '#9ca3af', size: 12 } },
+          tickmode: 'linear',
+          tick0: 2000,
+          dtick: 2,
+          range: [1999.5, 2025.5],
+          tickformat: 'd',
+          fixedrange: true,
+          tickfont: { color: '#9ca3af' },
+          gridcolor: '#1f2937'
+        }
       };
 
       Plotly.newPlot('calendarHeatmap', data, layout, { responsive: true, displayModeBar: false });
@@ -501,8 +521,8 @@ def index():
 
       if (!mapInstance) {
         mapInstance = L.map('fireMap').setView([39.0, 3.0], 5);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri, Earthstar Geographics, NASA &copy; OpenStreetMap contributors',
           maxZoom: 18
         }).addTo(mapInstance);
         markersLayer = L.layerGroup().addTo(mapInstance);
