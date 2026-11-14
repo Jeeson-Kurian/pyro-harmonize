@@ -1,187 +1,272 @@
 """
-Data Loader & Benchmark Generator for NASA FIRMS Active Fire Records
-Handles MODIS (MOD14/MYD14) and VIIRS (VNP14IMGTDL/VJ114IMGTDL) schemas.
+Ingestion and quality control for NASA FIRMS active-fire CSV files.
+
+Reads the CSV layout returned by the FIRMS area API and by FIRMS archive
+downloads (MODIS Collection 6.1 and VIIRS 375 m, standard or near-real-time
+processing) and converts it to one standard table. Nothing is invented: a value
+that is absent from the file stays missing (NaN), it is never replaced by a
+default number.
+
+The synthetic generator lives in engine/synthetic.py. It writes the same FIRMS
+layout, tagged version="SYNTHETIC", so simulated rows can never be mistaken for
+satellite observations after ingestion.
 """
+
+from __future__ import annotations
+
+import glob
+import json
+import os
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
-import os
-from typing import Tuple, Dict, Any, Optional
 
-MODIS_COLUMNS = [
-    "latitude", "longitude", "brightness", "scan", "track",
-    "acq_date", "acq_time", "satellite", "instrument", "confidence",
-    "version", "bright_t31", "frp", "daynight"
-]
+from .schema import FIRMS_SOURCES, PLATFORMS, SATELLITE_CODES, STANDARD_COLUMNS
 
-VIIRS_COLUMNS = [
-    "latitude", "longitude", "bright_ti4", "scan", "track",
-    "acq_date", "acq_time", "satellite", "instrument", "confidence",
-    "version", "bright_ti5", "frp", "daynight"
-]
-
-STANDARDIZED_COLUMNS = [
-    "latitude", "longitude", "sensor", "satellite", "acq_date",
-    "acq_time", "doy", "year", "frp", "confidence", "daynight",
-    "scan_angle", "fire_id"
-]
+_STRING_COLUMNS = {"satellite": str, "confidence": str, "version": str,
+                   "acq_time": str, "daynight": str, "instrument": str}
 
 
-def generate_benchmark_dataset(
-    start_year: int = 2000,
-    end_year: int = 2025,
-    region: str = "Mediterranean",
-    seed: int = 42
-) -> pd.DataFrame:
+def _infer_sensor(columns: List[str], instrument: Optional[pd.Series]) -> str:
+    if instrument is not None and instrument.notna().any():
+        value = str(instrument.dropna().iloc[0]).upper()
+        if "VIIRS" in value:
+            return "VIIRS"
+        if "MODIS" in value:
+            return "MODIS"
+    if "bright_ti4" in columns or "bright_ti5" in columns:
+        return "VIIRS"
+    if "bright_t31" in columns:
+        return "MODIS"
+    raise ValueError(
+        "Cannot tell whether this file is MODIS or VIIRS: it has no 'instrument', "
+        "'bright_ti4' or 'bright_t31' column. Pass sensor='MODIS' or sensor='VIIRS'."
+    )
+
+
+def _parse_datetime(acq_date: pd.Series, acq_time: Optional[pd.Series]) -> pd.Series:
+    """FIRMS acq_date (YYYY-MM-DD) + acq_time (HHMM, UTC) -> naive UTC timestamp."""
+    date = pd.to_datetime(acq_date, errors="coerce")
+    if acq_time is None:
+        return pd.Series(pd.NaT, index=acq_date.index, dtype="datetime64[ns]")
+    digits = acq_time.astype(str).str.replace(":", "", regex=False).str.strip()
+    digits = digits.str.extract(r"^(\d{1,4})", expand=False).str.zfill(4)
+    hours = pd.to_numeric(digits.str[:2], errors="coerce")
+    minutes = pd.to_numeric(digits.str[2:], errors="coerce")
+    bad = (hours > 23) | (minutes > 59)
+    stamp = date + pd.to_timedelta(hours, unit="h") + pd.to_timedelta(minutes, unit="m")
+    stamp[bad | hours.isna() | minutes.isna()] = pd.NaT
+    return stamp.astype("datetime64[ns]")
+
+
+def _confidence_class(sensor: str, raw: pd.Series) -> pd.Series:
     """
-    Generates a scientifically grounded, multi-decadal benchmark dataset of active fire
-    detections representing real NASA FIRMS observational dynamics.
-    
-    Models:
-    - 2000-2011: MODIS (Terra/Aqua) exclusively.
-    - 2012-2025: Coincident MODIS and VIIRS (Suomi-NPP / NOAA-20).
-    - Sensor disparities:
-      * VIIRS detects 3.2x - 4.5x more hotspots due to 375m resolution and lower FRP threshold (~2MW vs ~10MW).
-      * Coincident fire events produce multiple VIIRS pixels per single MODIS footprint.
-      * Climate-driven fire season expansion (+12 days shift and +28% intensity over 25 years).
+    Common three-level confidence class.
+    MODIS reports 0-100 %: <30 low, 30-80 nominal, >=80 high (MODIS fire user guide).
+    VIIRS 375 m reports l / n / h directly.
     """
-    rng = np.random.default_rng(seed)
-
-    # Regional bounding boxes and baseline seasonality
-    regions = {
-        "Mediterranean": {"lat_range": (36.0, 42.5), "lon_range": (-6.0, 15.0), "peak_doy": 215, "season_spread": 40},
-        "California": {"lat_range": (33.0, 40.5), "lon_range": (-123.0, -116.0), "peak_doy": 230, "season_spread": 45},
-        "Amazon": {"lat_range": (-12.0, -3.0), "lon_range": (-65.0, -50.0), "peak_doy": 245, "season_spread": 35},
-        "Australia": {"lat_range": (-37.0, -28.0), "lon_range": (140.0, 153.0), "peak_doy": 350, "season_spread": 50}
-    }
-    
-    reg_params = regions.get(region, regions["Mediterranean"])
-    lat_min, lat_max = reg_params["lat_range"]
-    lon_min, lon_max = reg_params["lon_range"]
-    base_peak_doy = reg_params["peak_doy"]
-    base_spread = reg_params["season_spread"]
-
-    records = []
-    fire_counter = 1000
-
-    for year in range(start_year, end_year + 1):
-        # Climate trend: Slight lengthening of season and higher fire intensity over decades
-        years_elapsed = year - start_year
-        climate_intensity_mult = 1.0 + (years_elapsed * 0.015)
-        # Seasonal peak jitter
-        peak_doy = int(base_peak_doy + rng.normal(0, 5) + (years_elapsed * 0.2))
-        
-        # Base number of distinct physical fire complexes in this year/region
-        n_complexes = int(rng.poisson(85 * climate_intensity_mult))
-
-        for _ in range(n_complexes):
-            fire_counter += 1
-            # Sample date from bell-curve around fire season peak
-            doy = int(rng.normal(peak_doy, base_spread))
-            doy = max(1, min(365, doy))
-            date_val = datetime(year, 1, 1) + timedelta(days=doy - 1)
-            date_str = date_val.strftime("%Y-%m-%d")
-
-            # Fire complex centroid and physical characteristics
-            c_lat = rng.uniform(lat_min, lat_max)
-            c_lon = rng.uniform(lon_min, lon_max)
-            # Log-normal fire radiative energy
-            true_complex_frp = float(rng.lognormal(mean=3.5, sigma=1.1) * climate_intensity_mult)
-
-            # Determine whether MODIS detects this complex
-            # MODIS threshold ~ 10-12 MW; detection prob decays below 25 MW
-            modis_p_detect = 1.0 / (1.0 + np.exp(-(true_complex_frp - 15.0) / 8.0))
-            if rng.uniform(0, 1) < modis_p_detect:
-                # MODIS detection (1 km nominal footprint)
-                m_lat = c_lat + rng.normal(0, 0.005)
-                m_lon = c_lon + rng.normal(0, 0.005)
-                # MODIS measures integrated cluster FRP with scan-angle degradation
-                scan = rng.uniform(1.0, 2.8)
-                modis_frp = max(5.0, true_complex_frp * rng.normal(1.0, 0.15))
-                records.append({
-                    "latitude": round(m_lat, 5),
-                    "longitude": round(m_lon, 5),
-                    "sensor": "MODIS",
-                    "satellite": "Aqua" if rng.uniform(0, 1) > 0.4 else "Terra",
-                    "acq_date": date_str,
-                    "acq_time": f"{rng.integers(11, 15):02d}{rng.integers(0, 59):02d}",
-                    "doy": doy,
-                    "year": year,
-                    "frp": round(modis_frp, 2),
-                    "confidence": int(rng.uniform(50, 100)),
-                    "daynight": "D",
-                    "scan_angle": round(scan, 2),
-                    "fire_id": fire_counter
-                })
-
-            # VIIRS became active in 2012 (Suomi-NPP) and 2018 (NOAA-20)
-            if year >= 2012:
-                # VIIRS 375m resolution breaks the same fire into multiple discrete sub-pixel detections
-                # VIIRS threshold is much lower (~2 MW)
-                viirs_subpixels = max(1, int(rng.poisson(1.8 + np.log1p(true_complex_frp))))
-                for sub_i in range(viirs_subpixels):
-                    v_lat = c_lat + rng.normal(0, 0.003)
-                    v_lon = c_lon + rng.normal(0, 0.003)
-                    sub_frp = max(1.2, (true_complex_frp / viirs_subpixels) * rng.normal(1.0, 0.2))
-                    records.append({
-                        "latitude": round(v_lat, 5),
-                        "longitude": round(v_lon, 5),
-                        "sensor": "VIIRS",
-                        "satellite": "Suomi-NPP" if year < 2018 or rng.uniform(0, 1) > 0.5 else "NOAA-20",
-                        "acq_date": date_str,
-                        "acq_time": f"{rng.integers(12, 14):02d}{rng.integers(0, 59):02d}",
-                        "doy": doy,
-                        "year": year,
-                        "frp": round(sub_frp, 2),
-                        "confidence": int(rng.uniform(60, 100)),
-                        "daynight": "D",
-                        "scan_angle": round(rng.uniform(1.0, 1.6), 2),
-                        "fire_id": fire_counter
-                    })
-
-    df = pd.DataFrame(records)
-    return df
+    out = pd.Series("unknown", index=raw.index, dtype=object)
+    text = raw.astype(str).str.strip().str.lower()
+    letters = {"l": "low", "low": "low", "n": "nominal", "nominal": "nominal",
+               "h": "high", "high": "high"}
+    mapped = text.map(letters)
+    out[mapped.notna()] = mapped[mapped.notna()]
+    numeric = pd.to_numeric(text, errors="coerce")
+    is_num = numeric.notna() & mapped.isna()
+    if sensor == "MODIS" or is_num.any():
+        out[is_num & (numeric < 30)] = "low"
+        out[is_num & (numeric >= 30) & (numeric < 80)] = "nominal"
+        out[is_num & (numeric >= 80)] = "high"
+    return out
 
 
-def load_firms_csv(filepath: str, sensor_type: str = "AUTO") -> pd.DataFrame:
-    """
-    Loads and standardizes an official NASA FIRMS CSV export.
-    Supports MODIS (standard or NRT) and VIIRS (S-NPP, NOAA-20/21).
-    """
+def _processing_level(version: pd.Series) -> pd.Series:
+    text = version.astype(str).str.strip().str.upper()
+    out = pd.Series("SP", index=version.index, dtype=object)
+    out[text.str.contains("SYNTH", na=False)] = "SYNTHETIC"
+    out[text.str.endswith("URT", na=False)] = "URT"
+    out[text.str.endswith("RT", na=False) & ~text.str.endswith("NRT", na=False)
+        & ~text.str.endswith("URT", na=False)] = "RT"
+    out[text.str.endswith("NRT", na=False)] = "NRT"
+    out[text.isin(["", "NAN", "NONE"])] = "unknown"
+    return out
+
+
+def standardize_firms(raw: pd.DataFrame, sensor: Optional[str] = None,
+                      source: Optional[str] = None) -> pd.DataFrame:
+    """Convert one FIRMS-layout table to the standard detection table."""
+    df = raw.copy()
+    df.columns = [str(c).lower().strip() for c in df.columns]
+    for required in ("latitude", "longitude", "acq_date"):
+        if required not in df.columns:
+            raise ValueError(f"FIRMS file is missing the required column '{required}'.")
+
+    if sensor is None and source in FIRMS_SOURCES:
+        sensor = FIRMS_SOURCES[source]["sensor"]
+    if sensor is None:
+        sensor = _infer_sensor(list(df.columns), df.get("instrument"))
+    sensor = sensor.upper()
+
+    n = len(df)
+    out = pd.DataFrame(index=df.index)
+    out["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+    out["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+    out["sensor"] = sensor
+
+    if "satellite" in df.columns:
+        code = df["satellite"].astype(str).str.strip().str.upper()
+        platform = code.map(SATELLITE_CODES)
+    else:
+        platform = pd.Series(np.nan, index=df.index, dtype=object)
+    if platform.isna().any() and source in FIRMS_SOURCES:
+        candidates = FIRMS_SOURCES[source]["platforms"]
+        if len(candidates) == 1:  # VIIRS sources are single-platform
+            platform = platform.fillna(candidates[0])
+    platform = platform.fillna("unknown")
+    # A platform code that contradicts the sensor is a data error, not a guess to fix.
+    known = platform.map(lambda p: PLATFORMS.get(p, {}).get("sensor"))
+    platform[(known.notna()) & (known != sensor)] = "unknown"
+    out["platform"] = platform
+
+    out["acq_datetime"] = _parse_datetime(df["acq_date"], df.get("acq_time"))
+    out["acq_date"] = pd.to_datetime(df["acq_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out["frp"] = pd.to_numeric(df["frp"], errors="coerce") if "frp" in df.columns else np.nan
+    raw_conf = df["confidence"] if "confidence" in df.columns else pd.Series("", index=df.index)
+    out["confidence_raw"] = raw_conf.astype(str).str.strip()
+    out["confidence_class"] = _confidence_class(sensor, raw_conf)
+    out["daynight"] = (df["daynight"].astype(str).str.strip().str.upper().str[:1]
+                       if "daynight" in df.columns else "")
+    # FIRMS 'scan' and 'track' are the pixel dimensions in km (they grow toward the
+    # swath edge). They are sizes, not angles.
+    out["scan_km"] = pd.to_numeric(df["scan"], errors="coerce") if "scan" in df.columns else np.nan
+    out["track_km"] = pd.to_numeric(df["track"], errors="coerce") if "track" in df.columns else np.nan
+    bright_col = "bright_ti4" if "bright_ti4" in df.columns else "brightness"
+    out["brightness"] = (pd.to_numeric(df[bright_col], errors="coerce")
+                         if bright_col in df.columns else np.nan)
+    # 'type' (0 vegetation fire, 1 volcano, 2 other static land source, 3 offshore)
+    # exists only in standard-processing files.
+    out["type"] = pd.to_numeric(df["type"], errors="coerce") if "type" in df.columns else np.nan
+    version = df["version"] if "version" in df.columns else pd.Series("", index=df.index)
+    out["version"] = version.astype(str).str.strip()
+    out["processing"] = _processing_level(version)
+    out["source"] = source or f"{sensor}_file"
+    assert len(out) == n
+    return out[STANDARD_COLUMNS].reset_index(drop=True)
+
+
+# File-name fragments used by the FIRMS archive download tool (best effort; if a
+# name is not recognised the sensor and platform are still read from the columns).
+_ARCHIVE_CODES = {"M-C61": "MODIS", "M6": "MODIS", "SV-C2": "VIIRS_SNPP", "J1V-C2": "VIIRS_NOAA20",
+                  "J2V-C2": "VIIRS_NOAA21"}
+
+
+def source_from_filename(filepath: str) -> Optional[str]:
+    """MODIS_SP.csv (downloader) or fire_archive_SV-C2_12345.csv (FIRMS archive) -> source id."""
+    stem = os.path.splitext(os.path.basename(filepath))[0].upper()
+    for name in sorted(FIRMS_SOURCES, key=len, reverse=True):
+        if stem.startswith(name):
+            return name
+    level = "NRT" if "_NRT_" in stem else "SP" if "_ARCHIVE_" in stem else None
+    if level:
+        for code, family in _ARCHIVE_CODES.items():
+            if f"_{code}_" in stem or stem.endswith(f"_{code}"):
+                candidate = f"{family}_{level}"
+                return candidate if candidate in FIRMS_SOURCES else None
+    return None
+
+
+def load_firms_csv(filepath: str, sensor: Optional[str] = None,
+                   source: Optional[str] = None) -> pd.DataFrame:
+    """Load one FIRMS CSV file (API or archive layout) into the standard table."""
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"File not found: {filepath}")
+    raw = pd.read_csv(filepath, dtype=_STRING_COLUMNS, low_memory=False)
+    if source is None:
+        source = source_from_filename(filepath)
+    return standardize_firms(raw, sensor=sensor, source=source)
 
-    raw_df = pd.read_csv(filepath)
-    raw_df.columns = [c.lower().strip() for c in raw_df.columns]
 
-    # Detect sensor if set to AUTO
-    if sensor_type == "AUTO":
-        if "bright_ti4" in raw_df.columns or "bright_ti5" in raw_df.columns:
-            sensor = "VIIRS"
-        elif "bright_t31" in raw_df.columns or "brightness" in raw_df.columns:
-            sensor = "MODIS"
-        else:
-            sensor = "UNKNOWN"
+def quality_filter(df: pd.DataFrame, drop_low_confidence: bool = True,
+                   vegetation_only: bool = True) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Apply documented screening rules and report how many rows each rule removed.
+
+    - rows without a valid position or UTC time are unusable and removed;
+    - rows from an unidentified platform are removed (they cannot be assigned an orbit);
+    - exact duplicates (platform, time, position) are removed;
+    - non-vegetation hot spots (type 1-3: volcano, static source, offshore) are
+      removed where the 'type' field exists (standard processing only);
+    - low-confidence detections are removed by default;
+    - a non-positive FRP is treated as missing; the detection itself is kept.
+    """
+    report: Dict[str, Any] = {"input_rows": int(len(df))}
+    keep = df.copy()
+
+    valid = (keep["latitude"].between(-90, 90) & keep["longitude"].between(-180, 180)
+             & keep["acq_datetime"].notna())
+    report["dropped_invalid_position_or_time"] = int((~valid).sum())
+    keep = keep[valid]
+
+    known = keep["platform"].isin(PLATFORMS.keys())
+    report["dropped_unknown_platform"] = int((~known).sum())
+    keep = keep[known]
+
+    dup = keep.duplicated(subset=["platform", "acq_datetime", "latitude", "longitude"])
+    report["dropped_duplicates"] = int(dup.sum())
+    keep = keep[~dup]
+
+    has_type = keep["type"].notna()
+    report["rows_without_type_field"] = int((~has_type).sum())
+    if vegetation_only:
+        non_veg = has_type & (keep["type"] != 0)
+        report["dropped_non_vegetation_type"] = int(non_veg.sum())
+        keep = keep[~non_veg]
     else:
-        sensor = sensor_type.upper()
+        report["dropped_non_vegetation_type"] = 0
 
-    standardized = pd.DataFrame()
-    standardized["latitude"] = raw_df["latitude"].astype(float)
-    standardized["longitude"] = raw_df["longitude"].astype(float)
-    standardized["sensor"] = sensor
-    standardized["satellite"] = raw_df.get("satellite", "Unknown")
-    standardized["acq_date"] = pd.to_datetime(raw_df["acq_date"]).dt.strftime("%Y-%m-%d")
-    standardized["acq_time"] = raw_df.get("acq_time", 1200).astype(str).str.zfill(4)
-    
-    dt = pd.to_datetime(standardized["acq_date"])
-    standardized["doy"] = dt.dt.dayofyear
-    standardized["year"] = dt.dt.year
-    
-    standardized["frp"] = raw_df.get("frp", 10.0).astype(float).fillna(10.0)
-    standardized["confidence"] = raw_df.get("confidence", 80)
-    standardized["daynight"] = raw_df.get("daynight", "D")
-    standardized["scan_angle"] = raw_df.get("scan", 1.0).astype(float).fillna(1.0)
-    standardized["fire_id"] = np.arange(len(standardized))
+    if drop_low_confidence:
+        low = keep["confidence_class"] == "low"
+        report["dropped_low_confidence"] = int(low.sum())
+        keep = keep[~low]
+    else:
+        report["dropped_low_confidence"] = 0
 
-    return standardized
+    keep = keep.copy()
+    bad_frp = keep["frp"].notna() & (keep["frp"] <= 0)
+    keep.loc[bad_frp, "frp"] = np.nan
+    report["frp_missing_or_nonpositive"] = int(keep["frp"].isna().sum())
+    report["output_rows"] = int(len(keep))
+    report["rules"] = {"drop_low_confidence": drop_low_confidence,
+                       "vegetation_only": vegetation_only}
+    return keep.reset_index(drop=True), report
+
+
+def load_firms_directory(directory: str) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Load every FIRMS CSV in a directory, plus manifest.json if the downloader wrote one.
+    Returns (standard table, provenance).
+    """
+    files = sorted(glob.glob(os.path.join(directory, "*.csv")))
+    if not files:
+        raise FileNotFoundError(f"No FIRMS CSV files found in {directory}")
+    manifest = None
+    manifest_path = os.path.join(directory, "manifest.json")
+    if os.path.exists(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as handle:
+            manifest = json.load(handle)
+
+    frames, file_info = [], []
+    for path in files:
+        table = load_firms_csv(path)
+        frames.append(table)
+        file_info.append({
+            "file": os.path.basename(path),
+            "source": str(table["source"].iloc[0]) if len(table) else "empty",
+            "rows": int(len(table)),
+            "date_min": table["acq_date"].min() if len(table) else None,
+            "date_max": table["acq_date"].max() if len(table) else None,
+        })
+    data = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=STANDARD_COLUMNS)
+    provenance = {"directory": directory, "files": file_info, "manifest": manifest}
+    return data, provenance

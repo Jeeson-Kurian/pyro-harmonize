@@ -1,0 +1,284 @@
+"""
+Reproducible case study: run the whole analysis and write a validation report.
+
+    python scripts/run_case_study.py                       # real FIRMS files in data/firms
+    python scripts/run_case_study.py --bbox -123,37,-120,40 --start 2012-02-01 --end 2024-12-31
+    python scripts/run_case_study.py --demo --out docs/synthetic_selftest   # simulator self-test
+
+Outputs (in --out, default docs/case_study):
+    REPORT.md     human-readable validation report
+    report.json   every number in the report, machine-readable
+    daily.csv, monthly.csv   the harmonised record
+
+The report states plainly whether it is based on NASA FIRMS data or on simulated data.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from dataclasses import replace
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from engine import __version__                                              # noqa: E402
+from engine.pipeline import AnalysisConfig, export_frame, load_dataset, run_analysis   # noqa: E402
+
+
+def _pct(v):
+    return "n/a" if v is None else f"{v:+.1f} %"
+
+
+def _num(v, digits=1):
+    return "n/a" if v is None else f"{v:,.{digits}f}"
+
+
+def _method_table(scores, forward, labels, selected):
+    lines = ["| Method | Total bias | Median monthly error | Rank corr. | Scaled RMSE | Forward-test bias |",
+             "|---|---:|---:|---:|---:|---:|"]
+    for key, s in scores.items():
+        if not s.get("available"):
+            continue
+        f = (forward or {}).get(key) or {}
+        name = labels.get(key, key) + (" **(used)**" if key == selected else "")
+        err = "n/a" if s["median_abs_pct_error"] is None else f"{s['median_abs_pct_error']:.1f} %"
+        lines.append(f"| {name} | {_pct(s['total_bias_pct'])} | {err} | {_num(s['spearman_r'], 3)} | "
+                     f"{_num(s['scaled_rmse'], 3)} | {_pct(f.get('total_bias_pct')) if f.get('available') else 'n/a'} |")
+    return "\n".join(lines)
+
+
+def build_report(summary, sensitivity, radius) -> str:
+    s = summary
+    out = [f"# PyroHarmonize validation report", ""]
+    if s["synthetic"]:
+        out += ["> **SYNTHETIC SELF-TEST. The data in this report are simulated (engine/synthetic.py).**",
+                "> It shows that the software recovers a known cross-sensor relationship. It is not",
+                "> evidence about real satellites or real fires.", ""]
+    else:
+        out += ["Data: NASA FIRMS active-fire detections (see the table of platforms below).", ""]
+    bbox = s["area"]["bbox_west_south_east_north"]
+    out += [f"- Software version: {__version__}",
+            f"- Area (west, south, east, north): {', '.join(f'{v:.3f}' for v in bbox)}",
+            f"- Period: {s['period']['start']} to {s['period']['end']} ({s['period']['days']:,} days, local solar dates)",
+            f"- Grid: {s['area']['cell_km']:g} km equal-area cells x day/night half-days",
+            f"- Reference scale: {s['reference_platform']} MODIS",
+            f"- Coverage basis: {s['coverage_basis']}", ""]
+
+    out += ["## Platforms and coverage", "",
+            "| Platform | Orbit | Detections used | Coverage | Days covered | Days with detections | Processing |",
+            "|---|---|---:|---|---:|---:|---|"]
+    for p in s["platforms"]:
+        cov = f"{p['coverage_start']} to {p['coverage_end']}" if p["coverage_start"] else "none"
+        levels = ", ".join(f"{k} {v:,}" for k, v in p["processing_levels"].items())
+        out.append(f"| {p['label']} | {p['orbit']} | {p['detections']:,} | {cov} | {p['days_covered']:,} | "
+                   f"{p['days_with_detections']:,} | {levels} |")
+    q = s["quality_control"]
+    out += ["", "## Quality control", "",
+            f"{q['input_rows']:,} rows read, {q['output_rows']:,} used. Removed: {q['dropped_low_confidence']:,} "
+            f"low-confidence, {q['dropped_non_vegetation_type']:,} non-vegetation hot spots, "
+            f"{q['dropped_duplicates']:,} duplicates, {q['dropped_invalid_position_or_time']:,} without valid "
+            f"position or time, {q['dropped_unknown_platform']:,} from an unidentified platform. "
+            f"{q['rows_without_type_field']:,} rows had no `type` field and could not be screened for static sources.", ""]
+
+    out += ["## Cross-sensor validation (held-out data)", ""]
+    if not s["calibrations"]:
+        out += ["No calibration was possible: " + " ".join(s["notes"]), ""]
+    for target, c in s["calibrations"].items():
+        label = next((p["label"] for p in s["platforms"] if p["platform"] == target), target)
+        out += [f"### {label} converted to the Aqua MODIS scale", ""]
+        if c["status"] != "calibrated":
+            out += [f"**Not calibrated and not used in the harmonised record.** Reason: {c['reason']}.", ""]
+            continue
+        m = c["matching"]
+        out += [f"- Test design: {c['validation_design']}",
+                f"- Matched cell half-days: {m['both_active']:,} seen by both, {m['target_only']:,} only by {label}, "
+                f"{m['reference_only']:,} only by Aqua MODIS, over {m['overlap_months']} months",
+                f"- Median time between the two overpasses: {_num(m['median_time_difference_min'], 0)} min; "
+                f"{_num(100 * m['share_within_15_min'], 0) if m['share_within_15_min'] is not None else 'n/a'} % within 15 min",
+                f"- Selection rule: {c['selection_rule']}", "",
+                "Active fire cells per month:", "",
+                _method_table(c["cross_validation"]["count"], (c["forward_in_time_test"] or {}).get("count"),
+                              c["method_labels"], c["selected_count_method"]), "",
+                "Fire radiative power (monthly sum of overpass snapshots, MW):", "",
+                _method_table(c["cross_validation"]["frp"], (c["forward_in_time_test"] or {}).get("frp"),
+                              c["method_labels"], c["selected_frp_method"]), ""]
+        fw = c["forward_in_time_test"]
+        if fw:
+            out += [f"Forward test: fitted on {fw['train_periods'][0]} to {fw['train_periods'][1]}, "
+                    f"tested on {fw['test_periods'][0]} to {fw['test_periods'][1]}.", ""]
+        d = c["diagnostics"]
+        if d.get("frp_fit_all_pairs"):
+            a, n15 = d["frp_fit_all_pairs"], d.get("frp_fit_within_15_min")
+            out += [f"FRP log-log fit, all pairs: slope {a['slope']}, R2 {a['r2']} (n = {a['n']:,}). "
+                    + (f"Pairs within 15 min only: slope {n15['slope']}, R2 {n15['r2']} (n = {n15['n']:,})."
+                       if n15 else "Too few pairs within 15 min for a separate fit."), ""]
+        iv = c["monthly_interval"]["count"]
+        if iv:
+            out += [f"Empirical 90 % band for monthly cells (square-root scale, from {iv['months']} held-out months): "
+                    f"{iv['q05']:+.2f} to {iv['q95']:+.2f}.", ""]
+
+    if sensitivity:
+        out += ["## Sensitivity to the grid cell size", "",
+                "The whole analysis repeated with other cell sizes. Stable results across sizes mean the "
+                "conclusion does not hinge on the 10 km choice.", "",
+                "| Cell size | Platform | Method used | Held-out total bias | Median monthly error |",
+                "|---:|---|---|---:|---:|"]
+        for row in sensitivity:
+            out.append(f"| {row['cell_km']:g} km | {row['target']} | {row['method']} | {_pct(row['bias'])} | "
+                       f"{'n/a' if row['error'] is None else str(row['error']) + ' %'} |")
+        out.append("")
+    if radius and radius.get("rows"):
+        out += ["## Sensitivity of cluster counts to the clustering radius", "",
+                f"Busiest month in the selection ({radius['sample_month']}). Cluster counts change with the radius, "
+                "which is why clusters are used for display only and not for the harmonised record.", "",
+                "| Radius | Sensor | Detections | Clusters | Pixels per cluster |", "|---:|---|---:|---:|---:|"]
+        for r in radius["rows"]:
+            out.append(f"| {r['eps_km']:g} km | {r['sensor']} | {r['detections']:,} | {r['clusters']:,} | {r['pixels_per_cluster']} |")
+        out.append("")
+
+    season = s["seasonality"]
+    out += ["## Seasonality (observed, no cause assigned)", ""]
+    core = season["core_season_80pct"]
+    if core:
+        out.append(f"- Shortest stretch holding 80 % of typical yearly activity: day {core['start_doy']} to day "
+                   f"{core['end_doy']} ({core['length_days']} days)")
+    for key, title in (("season_length", "Season length"), ("annual_total", "Yearly total")):
+        t = season["trends"][key]
+        if t["available"]:
+            out.append(f"- {title}: {t['slope_per_decade']:+.2f} {t['unit']} per decade, 95 % interval "
+                       f"{t['slope_95ci'][0] * 10:+.2f} to {t['slope_95ci'][1] * 10:+.2f}, p = {t['p_value']:.3f}, "
+                       f"{t['n_years']} fire years")
+        else:
+            out.append(f"- {title}: not reported ({t['reason']})")
+    out += ["", "## Notes and limits", ""] + [f"- {n}" for n in s["notes"]] + [
+        "- Hot-spot files record detections only. They do not record where a satellite looked and saw nothing, "
+        "or where cloud hid the ground.",
+        "- FRP values are instantaneous power at overpass time. They are not fire radiative energy.",
+        "- A result for one area does not validate the method for other regions or fire regimes.", ""]
+    return "\n".join(out)
+
+
+README_START = "<!-- CASE_STUDY:START -->"
+README_END = "<!-- CASE_STUDY:END -->"
+
+
+def readme_block(summary) -> str:
+    """Short real-data result for the README, built only from numbers in the report."""
+    s = summary
+    bbox = ", ".join(f"{v:g}" for v in s["area"]["bbox_west_south_east_north"])
+    lines = [f"Area (west, south, east, north): {bbox}. Period: {s['period']['start']} to {s['period']['end']}. "
+             f"Data: NASA FIRMS, {sum(p['detections'] for p in s['platforms']):,} detections after quality control. "
+             "Full report: [docs/case_study/REPORT.md](docs/case_study/REPORT.md).", "",
+             "| Platform compared with Aqua MODIS (held-out months) | Raw hot spots | Common grid only | "
+             "After harmonisation | Median monthly error | Forward-in-time test | Method used |",
+             "|---|---:|---:|---:|---:|---:|---|"]
+    rows = 0
+    for target, c in s["calibrations"].items():
+        label = next((p["label"] for p in s["platforms"] if p["platform"] == target), target)
+        if c["status"] != "calibrated":
+            lines.append(f"| {label} | not calibrated: {c['reason']} | | | | | |")
+            continue
+        cv = c["cross_validation"]["count"]
+        used = cv[c["selected_count_method"]]
+        fw = ((c["forward_in_time_test"] or {}).get("count") or {}).get(c["selected_count_method"]) or {}
+        err = "n/a" if used["median_abs_pct_error"] is None else f"{used['median_abs_pct_error']:.1f} %"
+        lines.append(f"| {label} ({used['months']} months) | {_pct(cv['raw_hotspots']['total_bias_pct'])} | "
+                     f"{_pct(cv['gridded_cells']['total_bias_pct'])} | {_pct(used['total_bias_pct'])} | {err} | "
+                     f"{_pct(fw.get('total_bias_pct')) if fw.get('available') else 'n/a'} | "
+                     f"{c['method_labels'][c['selected_count_method']]} |")
+        rows += 1
+    if not s["calibrations"]:
+        lines.append("| (no second platform could be compared with Aqua MODIS in this selection) | | | | | | |")
+    lines += ["", "Percentages are total differences from what Aqua MODIS reported in months that were not used "
+              "for fitting. This is one area; it does not validate the method elsewhere."]
+    return "\n".join(lines)
+
+
+def update_readme(path: str, block: str) -> bool:
+    """Replace the text between the CASE_STUDY markers. Returns False if the markers are missing."""
+    with open(path, "r", encoding="utf-8") as handle:
+        text = handle.read()
+    if README_START not in text or README_END not in text:
+        return False
+    head, rest = text.split(README_START, 1)
+    _, tail = rest.split(README_END, 1)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(head + README_START + "\n" + block + "\n" + README_END + tail)
+    return True
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Run the PyroHarmonize case study and write a validation report.")
+    parser.add_argument("--data-dir", default=None, help="folder with FIRMS CSV files (default data/firms)")
+    parser.add_argument("--demo", action="store_true", help="use the synthetic simulator instead of real files")
+    parser.add_argument("--bbox", default=None, help="west,south,east,north")
+    parser.add_argument("--start", default=None)
+    parser.add_argument("--end", default=None)
+    parser.add_argument("--cell-km", type=float, default=10.0)
+    parser.add_argument("--out", default=os.path.join("docs", "case_study"))
+    parser.add_argument("--no-sensitivity", action="store_true", help="skip the 5 / 25 km repeat runs")
+    parser.add_argument("--update-readme", action="store_true",
+                        help="write the real-data result into README.md (never done for synthetic data)")
+    args = parser.parse_args(argv)
+
+    detections, manifest, info = load_dataset(args.data_dir, force_synthetic=args.demo)
+    if info["mode"] == "synthetic" and not args.demo:
+        print("No FIRMS files found. Download real data first (data/download_nasa_firms.py) or pass --demo "
+              "to run the simulator self-test.", file=sys.stderr)
+        return 2
+    bbox = tuple(float(v) for v in args.bbox.split(",")) if args.bbox else None
+    config = AnalysisConfig(bbox=bbox, start=args.start, end=args.end, cell_km=args.cell_km)
+    analysis = run_analysis(detections, manifest, config, info)
+    if analysis.summary.get("empty"):
+        print(analysis.summary["message"], file=sys.stderr)
+        return 1
+
+    sensitivity = []
+    if not args.no_sensitivity:
+        for cell_km in sorted({5.0, args.cell_km, 25.0}):
+            run = analysis if cell_km == args.cell_km else run_analysis(
+                detections, manifest, replace(config, cell_km=cell_km), info)
+            for target, c in run.summary["calibrations"].items():
+                if c["status"] != "calibrated":
+                    continue
+                score = c["cross_validation"]["count"][c["selected_count_method"]]
+                sensitivity.append({"cell_km": cell_km, "target": target,
+                                    "method": c["method_labels"][c["selected_count_method"]],
+                                    "bias": score["total_bias_pct"], "error": score["median_abs_pct_error"]})
+    radius = analysis.radius_sensitivity()
+
+    os.makedirs(args.out, exist_ok=True)
+    report = build_report(analysis.summary, sensitivity, radius)
+    with open(os.path.join(args.out, "REPORT.md"), "w", encoding="utf-8") as handle:
+        handle.write(report)
+    slim = {k: v for k, v in analysis.summary.items() if k != "calendar"}
+    slim["cell_size_sensitivity"] = sensitivity
+    slim["radius_sensitivity"] = radius
+    with open(os.path.join(args.out, "report.json"), "w", encoding="utf-8") as handle:
+        json.dump(slim, handle, indent=1)
+    label = "SYNTHETIC - not satellite data" if analysis.summary["synthetic"] else "NASA FIRMS"
+    for kind in ("daily", "monthly"):
+        frame = export_frame(analysis, kind)
+        frame.insert(0, "data_mode", label)
+        frame.to_csv(os.path.join(args.out, f"{kind}.csv"), index=False)
+    print(f"Wrote {args.out}/REPORT.md, report.json, daily.csv, monthly.csv")
+    if args.update_readme:
+        readme = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "README.md")
+        if analysis.summary["synthetic"]:
+            print("README not changed: synthetic results are never written into the real-data section.")
+        elif update_readme(readme, readme_block(analysis.summary)):
+            print("README.md updated with the real-data result.")
+        else:
+            print("README.md has no CASE_STUDY markers; it was not changed.")
+    head = analysis.summary["headline_validation"]
+    if head:
+        print(f"{head['target_label']} -> Aqua MODIS scale, {head['held_out_months']} held-out months: raw hot-spot "
+              f"difference {_pct(head['raw_hotspot_bias_pct'])}, after harmonisation {_pct(head['harmonised_bias_pct'])}, "
+              f"median monthly error {head['harmonised_median_abs_pct_error']} %.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

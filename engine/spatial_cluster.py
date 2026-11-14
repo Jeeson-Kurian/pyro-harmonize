@@ -1,93 +1,107 @@
 """
-Spatiotemporal Fire Event Clustering Module
-Reconciles sub-pixel detection disparities by aggregating discrete satellite detections
-into coherent, physical Fire Complexes using DBSCAN / spatial neighborhood trees.
+Geodesic hot-spot clustering (for the map and for sensitivity diagnostics).
+
+A "hot-spot cluster" is a group of detections from ONE platform in ONE overpass
+that are chained together by great-circle distances of at most eps_km. It is a
+description of what one sensor saw at one moment. It is not a confirmed fire:
+one fire can appear as several clusters and several nearby fires can merge.
+
+With min_samples=1, DBSCAN is exactly single-linkage grouping at distance eps:
+every detection belongs to a cluster and an isolated detection is its own
+cluster of size 1. That is intended and is why these are called clusters of
+detections rather than fire events.
+
+Distances use the haversine metric on a ball tree, so eps_km means the same
+ground distance at every latitude.
 """
+
+from __future__ import annotations
+
+from typing import Dict, List, Sequence
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, List, Tuple
 from sklearn.cluster import DBSCAN
 
+from .schema import EARTH_RADIUS_KM
 
-class SpatiotemporalClusterer:
-    """
-    Groups discrete satellite active fire detections occurring on the same acquisition date
-    into coherent physical fire complexes. This eliminates the 3x-4x point artifact caused
-    by VIIRS's higher spatial resolution (375m) breaking a single fire into multiple detections.
-    """
+CLUSTER_COLUMNS = ["cluster_id", "platform", "sensor", "overpass", "time_utc", "local_date",
+                   "slot", "centroid_lat", "centroid_lon", "n_pixels", "frp_sum_mw",
+                   "frp_max_mw", "mean_scan_km", "processing"]
+
+
+class OverpassClusterer:
     def __init__(self, eps_km: float = 2.0, min_samples: int = 1):
+        if eps_km <= 0:
+            raise ValueError("eps_km must be positive")
+        self.eps_km = float(eps_km)
+        self.eps_rad = self.eps_km / EARTH_RADIUS_KM
+        self.min_samples = int(min_samples)
+
+    def label(self, lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
+        """Cluster labels for one set of simultaneous detections (-1 = noise if min_samples>1)."""
+        if len(lat) == 0:
+            return np.array([], dtype=int)
+        if len(lat) == 1:
+            return np.array([0])
+        coords = np.radians(np.column_stack([lat, lon]))
+        model = DBSCAN(eps=self.eps_rad, min_samples=self.min_samples,
+                       metric="haversine", algorithm="ball_tree")
+        return model.fit_predict(coords)
+
+    def cluster(self, keyed: pd.DataFrame) -> pd.DataFrame:
         """
-        :param eps_km: Spatial neighborhood threshold in kilometers (default ~2.0 km).
-                       Converted to approximate degrees (~0.018 deg).
-        :param min_samples: Minimum points to form a cluster (1 allows single isolated hotspots).
+        keyed: detections with the columns added by engine.gridding.add_keys.
+        Returns one row per hot-spot cluster.
         """
-        self.eps_km = eps_km
-        # 1 degree latitude ~ 111 km
-        self.eps_deg = eps_km / 111.0
-        self.min_samples = min_samples
+        if keyed.empty:
+            return pd.DataFrame(columns=CLUSTER_COLUMNS)
+        # label every overpass separately, then aggregate once
+        labels = np.full(len(keyed), -1, dtype=np.int64)
+        offset = 0
+        lat = keyed["latitude"].values
+        lon = keyed["longitude"].values
+        for idx in keyed.groupby(["platform", "overpass"], sort=False).indices.values():
+            local = self.label(lat[idx], lon[idx])
+            valid = local >= 0
+            labels[idx[valid]] = local[valid] + offset
+            offset += int(local.max()) + 1 if valid.any() else 0
+        g = keyed.assign(cluster_id=labels)
+        g = g[g["cluster_id"] >= 0]
+        if g.empty:
+            return pd.DataFrame(columns=CLUSTER_COLUMNS)
+        out = g.groupby("cluster_id").agg(
+            platform=("platform", "first"),
+            sensor=("sensor", "first"),
+            overpass=("overpass", "first"),
+            time_utc=("acq_datetime", "mean"),
+            local_date=("local_date", "first"),
+            slot=("slot", "first"),
+            centroid_lat=("latitude", "mean"),
+            centroid_lon=("longitude", "mean"),
+            n_pixels=("frp", "size"),
+            frp_sum_mw=("frp", lambda v: v.sum(min_count=1)),
+            frp_max_mw=("frp", "max"),
+            mean_scan_km=("scan_km", "mean"),
+            processing=("processing", "first"),
+        ).reset_index()
+        return out[CLUSTER_COLUMNS]
 
-    def cluster_detections(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Takes raw standardized detections and returns:
-        1. Original detections with assigned `cluster_id`.
-        2. Aggregated `fire_complexes` DataFrame (one row per physical fire event).
-        """
-        if df.empty:
-            return df.copy(), pd.DataFrame()
 
-        df_out = df.copy()
-        df_out["cluster_id"] = -1
-
-        complex_records = []
-        cluster_offset = 0
-
-        # Cluster date by date to preserve temporal separation
-        for date_val, day_group in df_out.groupby("acq_date"):
-            coords = day_group[["latitude", "longitude"]].values
-            
-            if len(coords) == 1:
-                labels = np.array([0])
-            else:
-                db = DBSCAN(eps=self.eps_deg, min_samples=self.min_samples, metric="euclidean")
-                labels = db.fit_predict(coords)
-                # Unassigned noise (-1) gets unique individual IDs
-                noise_mask = (labels == -1)
-                if np.any(noise_mask):
-                    max_label = labels.max() if len(labels) > 0 and labels.max() >= 0 else 0
-                    labels[noise_mask] = np.arange(max_label + 1, max_label + 1 + np.sum(noise_mask))
-
-            global_labels = labels + cluster_offset
-            df_out.loc[day_group.index, "cluster_id"] = global_labels
-            cluster_offset += (labels.max() + 1 if len(labels) > 0 else 1)
-
-            # Build aggregated complex summary for each cluster on this date
-            day_group = day_group.copy()
-            day_group["cluster_id"] = global_labels
-
-            for cid, c_data in day_group.groupby("cluster_id"):
-                sensors = set(c_data["sensor"].unique())
-                sensor_tag = "COINCIDENT" if len(sensors) > 1 else list(sensors)[0]
-                
-                modis_pts = c_data[c_data["sensor"] == "MODIS"]
-                viirs_pts = c_data[c_data["sensor"] == "VIIRS"]
-                
-                complex_records.append({
-                    "cluster_id": cid,
-                    "acq_date": date_val,
-                    "year": int(c_data["year"].iloc[0]),
-                    "doy": int(c_data["doy"].iloc[0]),
-                    "centroid_lat": float(c_data["latitude"].mean()),
-                    "centroid_lon": float(c_data["longitude"].mean()),
-                    "total_frp": float(c_data["frp"].sum()),
-                    "max_frp": float(c_data["frp"].max()),
-                    "n_detections": len(c_data),
-                    "n_modis": len(modis_pts),
-                    "n_viirs": len(viirs_pts),
-                    "modis_frp": float(modis_pts["frp"].sum()) if not modis_pts.empty else 0.0,
-                    "viirs_frp": float(viirs_pts["frp"].sum()) if not viirs_pts.empty else 0.0,
-                    "sensor_tag": sensor_tag
-                })
-
-        complexes_df = pd.DataFrame(complex_records)
-        return df_out, complexes_df
+def radius_sensitivity(keyed: pd.DataFrame,
+                       radii_km: Sequence[float] = (0.5, 1.0, 2.0, 5.0)) -> List[Dict]:
+    """
+    How the number of clusters per sensor depends on the clustering radius.
+    If the answer changes a lot with eps, cluster counts are not a stable metric
+    and should not be compared across sensors. Reported, not hidden.
+    """
+    rows: List[Dict] = []
+    for eps in radii_km:
+        clusters = OverpassClusterer(eps_km=eps).cluster(keyed)
+        for sensor in sorted(keyed["sensor"].unique()):
+            n_det = int((keyed["sensor"] == sensor).sum())
+            n_clu = int((clusters["sensor"] == sensor).sum())
+            rows.append({"eps_km": float(eps), "sensor": sensor, "detections": n_det,
+                         "clusters": n_clu,
+                         "pixels_per_cluster": round(n_det / n_clu, 2) if n_clu else None})
+    return rows

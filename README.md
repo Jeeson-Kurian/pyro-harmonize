@@ -1,142 +1,190 @@
-# 🛰️ PyroHarmonize: NASA MODIS & VIIRS Hotspot Harmonization Engine
+# PyroHarmonize
 
-[![NASA Space Apps 2026](https://img.shields.io/badge/NASA%20Space%20Apps-2026%20Ahlen-blue?style=for-the-badge&logo=nasa)](https://www.spaceappschallenge.org/)
-[![Challenge](https://img.shields.io/badge/Challenge-Harmonization%20of%20MODIS%20%26%20VIIRS-red?style=for-the-badge)](https://www.spaceappschallenge.org/2026/challenges/harmonization-of-modis-and-viirs-hot-spots/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-emerald?style=for-the-badge)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)](https://www.python.org/)
-[![NASA FIRMS Data](https://img.shields.io/badge/Data-NASA%20FIRMS%20EOSDIS-orange?style=for-the-badge)](https://firms.modaps.eosdis.nasa.gov/)
+**A burning activity calendar that puts MODIS and VIIRS active-fire records on one scale, and shows how well that works.**
 
-> **A scientifically grounded spatiotemporal clustering and machine learning calibration framework that bridges the 20-year satellite sensor gap between MODIS (~1 km) and VIIRS (375 m), synthesizing a unified, continuous multi-decadal "Burning Activity Calendar" (2000–2025+).**
+NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS Hot Spots* · [challenge page](https://www.spaceappschallenge.org/2026/challenges/modis-and-viirs-hot-spots/)
 
----
-
-## 📌 Executive Summary & The Scientific Dilemma
-
-For over two decades, NASA Earth observation satellites have been humanity’s primary tool for monitoring global wildfire activity from space:
-- **MODIS** (*Moderate Resolution Imaging Spectroradiometer* aboard Terra & Aqua): Operational since 2000, ~1 km nominal pixel footprint, detection threshold ~10–12 MW.
-- **VIIRS** (*Visible Infrared Imaging Radiometer Suite* aboard Suomi-NPP & NOAA-20): Operational since 2012, 375 m high-resolution I-band, detection threshold ~1.5–3 MW.
-
-### The Problem: Sensor Discontinuity
-When VIIRS became operational in 2012, recorded hotspot counts jumped by **300% to 450%** in fire-prone ecosystems. This sudden surge was **not** caused by climate change—it was an artifact of VIIRS’s superior spatial resolution resolving a single fire front into dozens of sub-pixel detections and capturing small, cool fires invisible to MODIS.
-
-Directly comparing uncalibrated MODIS and VIIRS records creates false climate conclusions and misguides fire management policies.
-
-### The Solution: PyroHarmonize
-**PyroHarmonize** solves this challenge by implementing:
-1. **Spatiotemporal DBSCAN Clustering:** Collapses discrete sub-pixel detections back into physical, cohesive fire complexes ($\epsilon \approx 2.0\text{ km}$).
-2. **Machine Learning Cross-Calibration:** Trains a regularized Ridge regressor on coincident satellite overpasses (2012–2025) to derive standardized Fire Radiative Power ($\text{MW}_{\text{std}}$) and eliminate sensor-transition bias.
-3. **The 25-Year Burning Activity Calendar:** An interactive 2D phenology heatmap (Year vs. Day-of-Year) displaying true, continuous fire trends and measuring climate-driven fire season expansion.
+[![tests](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml/badge.svg)](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
-## 🏗️ System Architecture
+## Status: read this first
+
+| | |
+|---|---|
+| Real-data pipeline (download, quality control, harmonisation, validation, web app) | **Implemented and covered by automated tests** |
+| Evidence that the method works | **On simulated data only so far** (`docs/synthetic_selftest/REPORT.md`). A simulation shows the software is correct. It says nothing about real satellites. |
+| Real NASA FIRMS case study | **Produced by two commands** (below). Until `data/firms/` contains FIRMS files, the app runs in a clearly labelled synthetic demo mode. |
+
+If `docs/case_study/REPORT.md` exists in this repository, it is the real-data result and the numbers quoted anywhere else should come from it.
+
+## The problem
+
+Satellites have recorded active-fire hot spots since late 2000, but the record is split across instruments that cannot be compared directly. A MODIS pixel is about 1 km wide (and grows toward the edge of the swath); a VIIRS pixel is 375 m. One fire front is one MODIS hot spot and many VIIRS hot spots, VIIRS sees smaller fires, and there are now up to three VIIRS satellites. A plain hot-spot count therefore jumps when VIIRS starts and again with every added satellite, with no change in burning.
+
+This matters now: Suomi-NPP stopped delivering data on 2 November 2026 and the two MODIS instruments are near the end of their missions. The record has to continue on NOAA-20 and NOAA-21 without a break in meaning.
+
+## The approach
+
+1. **One unit for every sensor.** Hot spots are reduced to *active fire cells*: 10 km equal-area grid cells per local day or night. This removes most of the pixel-size effect before any modelling.
+2. **One reference scale.** Everything is expressed as "what Aqua MODIS would have reported". A coarse sensor cannot be upgraded to see what it missed, but a fine one can be degraded. Aqua shares the early-afternoon orbit with every VIIRS satellite; Terra (morning orbit) is handled separately.
+3. **Calibration on matched observations.** For cells that a VIIRS platform reports, a model estimates the probability that Aqua MODIS reports them too, and their expected Aqua FRP.
+4. **Held-out validation decides.** The model competes with simple baselines on years it has not seen, and on a forward-in-time split. The simplest method within 2 % of the best is used. If the data are too thin to validate anything, the platform is reported as "not calibrated" and left out. There are no fallback numbers in the code.
+5. **Missing is not zero.** Days without data coverage are shown as missing everywhere. Several satellites are averaged, never added.
 
 ```mermaid
-flowchart TD
-    subgraph DataIngestion["1. NASA FIRMS Data Ingestion"]
-        M["Terra/Aqua MODIS (MOD14/MYD14)<br/>2000–Present (1 km)"] --> N["Standardized Hotspot Ingestion"]
-        V["S-NPP/NOAA-20 VIIRS (VNP14IMGTDL)<br/>2012–Present (375 m)"] --> N
-    end
-
-    subgraph SpatiotemporalClustering["2. Spatiotemporal Clustering"]
-        N --> DB["DBSCAN Algorithm (ε = 2.0 km)"]
-        DB --> FC["Physical Fire Complexes<br/>(Centroid, Area, Integrated FRP)"]
-    end
-
-    subgraph CrossCalibration["3. ML Cross-Sensor Calibration"]
-        FC --> CO["Coincident Overpasses Filter (2012+)"]
-        CO --> REG["Ridge / RF Regressor<br/>(Cross-Sensor Calibration)"]
-        REG --> HARM["Harmonized Fire Metrics<br/>(MW_std & Event_std)"]
-    end
-
-    subgraph Deliverables["4. Interactive Deliverables"]
-        HARM --> CAL["25-Year Burning Activity Calendar<br/>(Year × DOY Matrix)"]
-        HARM --> PHEN["Phenology Analytics<br/>(Season Onset, Peak, Duration)"]
-        HARM --> MAP["Spatial Cluster Footprints<br/>(Leaflet Interactive GIS)"]
-    end
+flowchart LR
+    A["NASA FIRMS CSV<br/>MODIS C6.1, VIIRS 375 m"] --> B["Quality control<br/>type, confidence, duplicates"]
+    B --> C["Common unit<br/>10 km cell x local half-day"]
+    C --> D["Coverage<br/>data vs no data"]
+    D --> E["Matched pairs<br/>target vs Aqua MODIS"]
+    E --> F["Candidates + held-out test<br/>simplest good method wins"]
+    F --> G["Harmonised daily record<br/>source of every day kept"]
+    G --> H["Calendar · anomalies · critical periods<br/>map · CSV export"]
 ```
 
----
+Full description with equations and limits: [docs/METHODS.md](docs/METHODS.md).
 
-## 🚀 Key Features
+## What the web app does
 
-- **🔥 25-Year Burning Activity Calendar:** Interactive multi-decadal heatmaps revealing seasonal fire evolution across Mediterranean, California, Amazon, and Australian biomes.
-- **🔬 Side-by-Side Sensor Gap Demonstration:** Real-time toggle comparing raw unharmonized data (with the artificial 2012 step jump) against the harmonized continuous climate record.
-- **📈 Fire Phenology & Climate Diagnostics:** Automatically calculates seasonal onset (10% cumulative radiative energy), peak day of year, and season termination (90%), quantifying fire season lengthening.
-- **🛰️ Coincident Satellite Diagnostics:** Scatter plots and residual evaluations of simultaneously observed fire complexes ($R^2 \approx 0.91$, RMSE $\approx 12.4\text{ MW}$).
-- **🗺️ Interactive GIS Map:** Integrated Leaflet map rendering physical fire complex centroids, intensity radii, and sensor telemetry.
-- **⚡ Zero Heavy Dependencies:** Runs locally on Python standard tools, FastAPI, and client-side visualization engines.
+- **Any area, any period**: type a bounding box or copy it from the map, pick dates.
+- **Burning activity calendar** (year x day of year): harmonised active cells, harmonised FRP, raw MODIS hot spots, raw VIIRS hot spots, and a view of which sensor each day comes from.
+- **Validation panel**: held-out comparison against Aqua MODIS, every method in one table, the one in use marked.
+- **Is this month unusual?** Anomaly against the same calendar month in other years, with percentile, coverage and a 90 % range.
+- **Critical periods**: typical and busy weeks of the year, peak week, core season.
+- **Fire season timing** per fire year, with trends reported as observed changes and no cause assigned.
+- **Sensor comparison**: detection probability by FRP and FRP of cells seen by both.
+- **Map of hot-spot clusters** (geodesic DBSCAN per overpass) and a clustering-radius sensitivity table.
+- **CSV export** of detections (with FIRMS source, version and processing level), the daily record and the monthly record.
 
----
+## Quick start
 
-## 📊 NASA Data Sources Used
-
-In strict compliance with NASA Space Apps Challenge guidelines, this project utilizes and builds upon official NASA open-science datasets:
-
-1. **NASA FIRMS (Fire Information for Resource Management System):**
-   - **MODIS 1km Active Fire Product (MOD14 / MYD14):** Terra and Aqua platforms (2000–present).
-   - **VIIRS 375m Active Fire Product (VNP14IMGTDL):** Suomi National Polar-orbiting Partnership (2012–present).
-   - **VIIRS 375m Active Fire Product (VJ114IMGTDL):** NOAA-20 / JPSS-1 (2018–present).
-   - Portal: [https://firms.modaps.eosdis.nasa.gov/](https://firms.modaps.eosdis.nasa.gov/)
-2. **NASA EOSDIS (Earth Observing System Data and Information System):**
-   - Satellite overpass orbital mechanics and sensor geometry specifications.
-
----
-
-## 💻 Installation & Quickstart
-
-### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/pyro-harmonize.git
+git clone https://github.com/Jeeson-Kurian/pyro-harmonize.git
 cd pyro-harmonize
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest -q          # automated tests
+python app.py                # http://127.0.0.1:8000  (synthetic demo until you add data)
 ```
 
-### 2. Install Dependencies
+### Use real NASA data
+
+1. Get a free FIRMS MAP_KEY: <https://firms.modaps.eosdis.nasa.gov/api/map_key/>
+2. Download one area and period (west,south,east,north):
+
 ```bash
-pip install -r requirements.txt
+export FIRMS_MAP_KEY=your_key            # Windows PowerShell: $env:FIRMS_MAP_KEY="your_key"
+python data/download_nasa_firms.py --bbox -124,36,-119,41 --start 2012-01-20 --end 2024-12-31 \
+       --sources MODIS_SP,VIIRS_SNPP_SP,VIIRS_NOAA20_SP
 ```
 
-### 3. Run the Unit & Integration Tests
-```bash
-python tests/test_pipeline.py
-```
+The script requests 5 days at a time, caches every request, retries failures, and writes `data/firms/manifest.json`, which records exactly which dates were retrieved. Re-running the same command resumes and retries only what failed. For the long MODIS-only record add a second run with `--start 2000-11-01 --sources MODIS_SP`.
 
-### 4. Launch the Interactive Application
+Files from the FIRMS archive download tool (<https://firms.modaps.eosdis.nasa.gov/download/>) also work: put the CSVs in `data/firms/`.
+
+3. Produce the validation report and start the app:
+
 ```bash
+python scripts/run_case_study.py --update-readme   # writes docs/case_study/ and fills "Real-data result" below
 python app.py
 ```
-Open your browser at: **`http://127.0.0.1:8000`**
 
----
+Steps 2 and 3 in one command (asks for the key if `FIRMS_MAP_KEY` is not set):
 
-## 🧪 Mathematical & Algorithmic Formulation
+```bash
+python scripts/make_submission.py
+```
 
-### 1. Spatiotemporal Neighborhood Condition
-Two active fire points $p_i = (\text{lat}_i, \text{lon}_i, t_i)$ and $p_j = (\text{lat}_j, \text{lon}_j, t_j)$ belong to the same physical fire complex $\mathcal{C}_k$ if and only if:
-$$\mathcal{D}_{\text{haversine}}(p_i, p_j) \le \epsilon \quad \text{and} \quad |t_i - t_j| \le \Delta t_{\text{max}}$$
-Where $\epsilon = 2.0\text{ km}$ and $\Delta t_{\text{max}} = 24\text{ hours}$.
+Commit `data/firms/*.csv`, `data/firms/manifest.json` and `docs/case_study/` so that others can reproduce the result.
 
-### 2. Cross-Sensor Energy Normalization
-For coincident observations in year $t \ge 2012$, the standardized radiative power is derived via regularized cross-calibration:
-$$\log(\text{FRP}_{\text{std}}) = w_0 + w_1 \log(\text{FRP}_{\text{sensor}}) + w_2 \cdot \theta_{\text{scan}} + w_3 \cdot \mathcal{N}_{\text{subpixels}} + \varepsilon$$
+Settings: `PYRO_DATA_DIR` (other data folder), `PYRO_DEMO=1` (force the synthetic demo), `HOST`, `PORT`.
 
-### 3. Phenological Fire Season Boundaries
-For year $y$, cumulative fire radiative energy is defined as $C_y(d) = \sum_{i=1}^d \text{FRE}_y(i)$. The phenology markers are:
-- **Onset ($D_{\text{start}}$):** $\min \{d \mid C_y(d) \ge 0.10 \times C_y(365)\}$
-- **Peak ($D_{\text{peak}}$):** $\operatorname{argmax}_{d} \{\text{FRE}_y(d)\}$
-- **Termination ($D_{\text{end}}$):** $\min \{d \mid C_y(d) \ge 0.90 \times C_y(365)\}$
-- **Season Duration:** $\Delta D_y = D_{\text{end}} - D_{\text{start}}$
+## Real-data result
 
----
+<!-- CASE_STUDY:START -->
+Not produced yet. Run `python scripts/make_submission.py` (see "Use real NASA data"). The script fills this section with the numbers from `docs/case_study/REPORT.md`.
+<!-- CASE_STUDY:END -->
 
-## 🏆 NASA Space Apps Submission Details
+## Self-test on simulated data
 
-- **Event:** NASA International Space Apps Challenge Ahlen 2026
-- **Challenge:** *Harmonization of MODIS and VIIRS Hot Spots*
-- **Target Global Awards:** Best Use of Data / Galactic Impact
-- **Lead Organizer:** GDG Ahlen / NASA Space Apps Local Lead Anna Muzykina
+`python scripts/run_case_study.py --demo --out docs/synthetic_selftest` runs the whole pipeline on a simulator that is independent of the harmonisation code (fires with sub-pixel structure, pixel footprints, detection limits, cloud, separate orbits, a sensor outage). In that simulated world:
 
----
+| Suomi-NPP VIIRS compared with Aqua MODIS, held-out years | Total difference |
+|---|---:|
+| Raw hot-spot counts | +217 % |
+| Common grid only | +143 % |
+| After harmonisation (cross-validation) | 0 % (median monthly error 6 %) |
+| After harmonisation (forward-in-time test) | +3 % |
 
-## 📄 License
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+In a blind test on a second simulated world (`tests/test_harmonization.py`), Aqua was hidden for the last four years and reconstructed from VIIRS: the monthly totals matched the hidden Aqua record within 2 % overall (correlation 0.997), and 94 % of months fell inside the 90 % range.
+
+**These numbers describe the simulator, not the Earth.** They show that the code does what it says. Real-data numbers come from `docs/case_study/REPORT.md`.
+
+## Implemented and not implemented
+
+| Implemented | Not implemented |
+|---|---|
+| FIRMS API downloader with manifest, caching, retries | Automatic download from inside the web app |
+| Ingestion of API and archive CSV layouts, SP and NRT | Cloud and swath masks (not available from hot-spot files) |
+| Quality control with per-rule counts | Land-cover or biome-specific calibration |
+| Equal-area cells, local-solar half-days, geodesic clustering | Fire radiative energy (time-integrated FRP) |
+| Per-platform calibration with held-out and forward tests | Validation across many regions |
+| Aqua-equivalent daily record with per-day source | Forecasting |
+| Empirical 90 % range for sensor-converted months | Formal error propagation |
+| Calendar, anomalies, critical weeks, fire-year seasonality | Polygon areas (bounding boxes only) |
+| CSV export with provenance | |
+
+## Data and citation
+
+Active-fire data come from NASA FIRMS (Fire Information for Resource Management System), part of NASA's LANCE / EOSDIS: MODIS Collection 6.1 active fire products (Terra, Aqua) and VIIRS 375 m active fire products (Suomi-NPP, NOAA-20, NOAA-21). <https://firms.modaps.eosdis.nasa.gov/>
+
+We acknowledge the use of data from NASA's Fire Information for Resource Management System (FIRMS), part of NASA's Earth Science Data and Information System (ESDIS).
+
+## Limits
+
+- A result for one area does not validate the method elsewhere. Run the case study for each area you care about.
+- Hot-spot files do not say where the satellite looked and saw nothing, or where cloud hid the ground.
+- FRP values are instantaneous power at overpass time. They are not energy.
+- Terra-derived values (before July 2002) cross the diurnal cycle and are the least certain part of the record.
+- Trends are observed changes in a mixed-sensor record. No cause is assigned.
+- Not for operational fire-fighting decisions.
+
+More in [docs/METHODS.md](docs/METHODS.md), section 11.
+
+## Use of AI
+
+Parts of the code, tests and documentation in this repository were written with the assistance of an AI model (Claude, by Anthropic). No AI-generated images, video or audio are used. The data are NASA FIRMS data, or simulated data that are labelled as synthetic wherever they appear.
+
+## Project layout
+
+```
+app.py                       web API (FastAPI) and page
+web/index.html               dashboard (charts drawn in the page, map with Leaflet)
+engine/data_loader.py        FIRMS ingestion and quality control
+engine/gridding.py           equal-area cells, local half-days, overpasses
+engine/matching.py           coverage and cross-sensor pairs
+engine/harmonizer.py         calibration candidates, held-out validation, selection
+engine/pipeline.py           end-to-end analysis and exports
+engine/calendar_generator.py calendar, fire years, trends
+engine/anomaly.py            monthly anomalies, critical weeks
+engine/spatial_cluster.py    geodesic hot-spot clustering (map only)
+engine/synthetic.py          simulator for tests and demo mode
+data/download_nasa_firms.py  FIRMS downloader
+scripts/run_case_study.py    reproducible validation report
+scripts/make_submission.py   download + report + README result in one command
+tests/                       automated tests
+docs/METHODS.md              method, validation and limits
+```
+
+## Submission
+
+- Event: NASA International Space Apps Challenge Ahlen 2026
+- Challenge: Harmonization of MODIS and VIIRS Hot Spots
+- Target Global Awards: Best Use of Data / Galactic Impact
+- Lead Organizer: GDG Ahlen / NASA Space Apps Local Lead Anna Muzykina
+- Team: PyroHarmonize
+
+## License
+
+MIT. See [LICENSE](LICENSE).

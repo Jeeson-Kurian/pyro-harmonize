@@ -1,7 +1,6 @@
 """
-PyroHarmonize: NASA Space Apps 2026
-Unified MODIS-VIIRS Burning Activity Calendar & Spatiotemporal Harmonization Engine
+PyroHarmonize engine: MODIS / VIIRS active-fire harmonisation for NASA FIRMS data.
+See docs/METHODS.md for the method and its limits.
 """
 
-__version__ = "1.0.0"
-__author__ = "Team PyroHarmonize - NASA Space Apps Challenge Ahlen 2026"
+__version__ = "2.0.0"

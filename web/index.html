@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PyroHarmonize | MODIS and VIIRS burning activity calendar</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --surface: #1a1a19; --card: #222220; --card2: #2a2a27; --line: #3a3a36; --grid: #2f2f2c;
+    --text: #f0efec; --text2: #c3c2b7; --muted: #94938b;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
+    --nodata: #33332f; --zero: #13243b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; gap: 16px;
+           align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  header p { margin: 2px 0 0; color: var(--text2); font-size: 12.5px; }
+  main { max-width: 1240px; margin: 0 auto; padding: 18px 24px 40px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+  .card h2 { font-size: 15px; margin: 0 0 2px; font-weight: 650; }
+  .card h3 { font-size: 13px; margin: 14px 0 6px; font-weight: 650; color: var(--text); }
+  .sub { color: var(--text2); font-size: 12.5px; margin: 0 0 12px; max-width: 95ch; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px;
+          padding: 3px 10px; font-size: 12px; color: var(--text2); background: var(--card2); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .banner { border-radius: 10px; padding: 12px 16px; border: 1px solid var(--line); background: var(--card); display: flex; gap: 12px; }
+  .banner.synthetic { border-color: var(--warn); background: #2b2616; }
+  .banner .icon { font-size: 18px; line-height: 1.2; flex: none; }
+  .banner strong { display: block; margin-bottom: 2px; }
+  .banner span { color: var(--text2); font-size: 12.5px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+  label { display: grid; gap: 3px; font-size: 11.5px; color: var(--muted); }
+  input, select, button { font: inherit; color: var(--text); background: var(--card2); border: 1px solid var(--line);
+          border-radius: 7px; padding: 6px 9px; }
+  input[type=number] { width: 92px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--s1); border-color: var(--s1); color: #fff; font-weight: 600; }
+  button:hover { border-color: var(--muted); }
+  a.btn { display: inline-block; text-decoration: none; color: var(--text); background: var(--card2);
+          border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; font-size: 13px; }
+  a.btn:hover { border-color: var(--muted); }
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 900px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+  .tile .k { color: var(--muted); font-size: 11.5px; }
+  .tile .v { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; margin: 2px 0; }
+  .tile .d { color: var(--text2); font-size: 12px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tabs button { font-size: 12.5px; padding: 5px 10px; color: var(--text2); }
+  .tabs button.on { background: var(--text); color: var(--surface); border-color: var(--text); font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 11.5px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.sel td { background: #1f2b26; }
+  .tag { font-size: 10.5px; border: 1px solid var(--s3); color: var(--text); border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text2); margin: 0 0 6px; }
+  .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .legend i.sq { height: 10px; width: 10px; border-radius: 2px; }
+  .legend i.dash { background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px) !important; }
+  .chart { width: 100%; position: relative; }
+  .chart svg { display: block; width: 100%; overflow: visible; }
+  .note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .warn { color: var(--text); border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 8px 0; font-size: 12.5px; }
+  #tooltip { position: fixed; pointer-events: none; background: #0f0f0e; border: 1px solid var(--line); border-radius: 7px;
+             padding: 7px 9px; font-size: 12px; color: var(--text); z-index: 2000; display: none; max-width: 280px;
+             box-shadow: 0 4px 16px rgba(0,0,0,.45); }
+  #tooltip b { font-weight: 650; }
+  #tooltip .r { display: flex; justify-content: space-between; gap: 14px; color: var(--text2); }
+  #tooltip .r span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+  #map { height: 380px; border-radius: 8px; border: 1px solid var(--line); background: #111; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  ul.plain { margin: 6px 0 0; padding-left: 18px; color: var(--text2); font-size: 12.5px; }
+  ul.plain li { margin: 3px 0; }
+  details summary { cursor: pointer; color: var(--text2); font-size: 12.5px; }
+  footer { max-width: 1240px; margin: 0 auto; padding: 0 24px 30px; color: var(--muted); font-size: 12px; }
+  footer a, .card a { color: var(--s1); }
+  .loading { color: var(--muted); padding: 30px 0; text-align: center; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>PyroHarmonize</h1>
+    <p>Harmonised MODIS and VIIRS burning activity calendar. NASA Space Apps 2026, "Harmonization of MODIS and VIIRS Hot Spots".</p>
+  </div>
+  <div id="modeChip"></div>
+</header>
+<main>
+  <div id="banner"></div>
+
+  <section class="card">
+    <h2>Area and period</h2>
+    <p class="sub">Choose any box inside the loaded data and any date range. Coordinates are in degrees (west and south are negative).</p>
+    <div class="controls">
+      <label>West<input id="inW" type="number" step="0.1"></label>
+      <label>South<input id="inS" type="number" step="0.1"></label>
+      <label>East<input id="inE" type="number" step="0.1"></label>
+      <label>North<input id="inN" type="number" step="0.1"></label>
+      <label>From<input id="inStart" type="date"></label>
+      <label>To<input id="inEnd" type="date"></label>
+      <button class="primary" id="btnApply">Analyse</button>
+      <button id="btnReset">Whole dataset</button>
+      <button id="btnView" title="Copy the area currently visible in the map below">Use map view</button>
+    </div>
+    <div class="controls" style="margin-top:10px">
+      <span style="color:var(--muted);font-size:12px;align-self:center">Download this selection:</span>
+      <a class="btn" id="dlDaily" download>Daily record (CSV)</a>
+      <a class="btn" id="dlMonthly" download>Monthly record and anomalies (CSV)</a>
+      <a class="btn" id="dlDet" download>Detections with provenance (CSV)</a>
+    </div>
+    <p class="note" id="selNote"></p>
+  </section>
+
+  <div id="content"><div class="loading">Loading and analysing the data…</div></div>
+</main>
+<footer>
+  <p>Active-fire data: NASA FIRMS (Fire Information for Resource Management System), part of NASA LANCE / EOSDIS:
+  MODIS Collection 6.1 (Terra, Aqua) and VIIRS 375 m (Suomi-NPP, NOAA-20, NOAA-21) active fire products,
+  <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">firms.modaps.eosdis.nasa.gov</a>.
+  Hot spots mark thermal anomalies seen at overpass time; they are not a complete record of fires.
+  Not for operational fire-fighting decisions.</p>
+</footer>
+<div id="tooltip"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="window.LEAFLET_FAILED=true"></script>
+<script>
+"use strict";
+const C = {surface:'#1a1a19', card:'#222220', line:'#3a3a36', grid:'#2f2f2c', text:'#f0efec', text2:'#c3c2b7',
+           muted:'#94938b', s1:'#3987e5', s2:'#d95926', s3:'#199e70', warn:'#fab219', nodata:'#33332f', zero:'#13243b'};
+const RAMP = ['#0d366b','#104281','#184f95','#1c5cab','#256abf','#2a78d6','#3987e5','#5598e7','#6da7ec','#86b6ef','#9ec5f4','#b7d3f6','#cde2fb'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function fmt(v, d) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '–';
+  if (d === undefined) d = Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 10 ? 1 : 2;
+  v = Number(v); if (Math.abs(v) < 0.5 * Math.pow(10, -d)) v = 0;
+  return Number(v).toLocaleString('en-US', {maximumFractionDigits: d, minimumFractionDigits: 0});
+}
+const pct = v => (v === null || v === undefined) ? '–' : (v >= 0.05 ? '+' : '') + fmt(v, 1) + ' %';
+const tip = $('tooltip');
+function showTip(html, ev) {
+  tip.innerHTML = html; tip.style.display = 'block';
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + w > window.innerWidth - 8) x = ev.clientX - w - 14;
+  if (y + h > window.innerHeight - 8) y = ev.clientY - h - 14;
+  tip.style.left = Math.max(4, x) + 'px'; tip.style.top = Math.max(4, y) + 'px';
+}
+function hideTip() { tip.style.display = 'none'; }
+function tipRows(title, rows) {
+  return '<b>' + esc(title) + '</b>' + rows.map(r => '<div class="r"><span>' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></div>').join('');
+}
+function niceTicks(lo, hi, n) {
+  if (!(hi > lo)) hi = lo + 1;
+  const raw = (hi - lo) / Math.max(1, n), mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw) || 10 * mag;
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(Math.round(v / step) * step);
+  return out;
+}
+function legendHtml(items) {
+  return '<div class="legend">' + items.map(s =>
+    '<span><i class="' + (s.shape === 'sq' ? 'sq' : '') + (s.dash ? ' dash' : '') + '" style="background:' + s.color + ';color:' + s.color + '"></i>' + esc(s.name) + '</span>').join('') + '</div>';
+}
+
+/* ---- charts with a shared category axis (lines, bars, bands) ---------------------------- */
+function catChart(el, o) {
+  const draw = () => {
+    const W = Math.max(320, el.clientWidth), H = o.height || 240;
+    const m = {l: 54, r: 14, t: 8, b: o.xTitle ? 44 : 30};
+    const n = o.categories.length, pw = W - m.l - m.r, ph = H - m.t - m.b, bw = pw / Math.max(1, n);
+    let ymax = o.yMax || 0, ymin = 0;
+    o.series.forEach(s => { (s.y || []).forEach(v => { if (v !== null && v > ymax) ymax = v; });
+                            (s.y1 || []).forEach(v => { if (v !== null && v > ymax) ymax = v; }); });
+    (o.refs || []).forEach(r => { if (r.y > ymax) ymax = r.y; });
+    if (ymax <= 0) ymax = 1;
+    const ticks = niceTicks(ymin, ymax, 4); ymax = Math.max(ymax, ticks[ticks.length - 1]);
+    const X = i => m.l + (i + 0.5) * bw, Y = v => m.t + ph - (v - ymin) / (ymax - ymin) * ph;
+    let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc(o.aria || '') + '">';
+    ticks.forEach(t => { s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(t) + '" y2="' + Y(t) + '" stroke="' + C.grid + '"/>' +
+      '<text x="' + (m.l - 7) + '" y="' + (Y(t) + 4) + '" text-anchor="end" font-size="11" fill="' + C.muted + '">' + fmt(t) + '</text>'; });
+    const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(pw / (o.labelWidth || 58)))));
+    o.categories.forEach((c, i) => { if (i % every === 0) s += '<text x="' + X(i) + '" y="' + (m.t + ph + 16) +
+      '" text-anchor="middle" font-size="11" fill="' + C.muted + '">' + esc(c) + '</text>'; });
+    if (o.yTitle) s += '<text transform="translate(13,' + (m.t + ph / 2) + ') rotate(-90)" text-anchor="middle" font-size="11" fill="' + C.muted + '">' + esc(o.yTitle) + '</text>';
+    if (o.xTitle) s += '<text x="' + (m.l + pw / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="11" fill="' + C.muted + '">' + esc(o.xTitle) + '</text>';
+    o.series.forEach(sr => {
+      if (sr.type === 'band') {
+        let up = '', dn = '';
+        for (let i = 0; i < n; i++) { if (sr.y[i] === null || sr.y1[i] === null) continue;
+          up += (up ? 'L' : 'M') + X(i) + ' ' + Y(sr.y1[i]); dn = 'L' + X(i) + ' ' + Y(sr.y[i]) + dn; }
+        if (up) s += '<path d="' + up + dn + 'Z" fill="' + sr.color + '" opacity="0.18"/>';
+      } else if (sr.type === 'bar') {
+        const w = Math.max(1, Math.min(34, bw - 2));
+        for (let i = 0; i < n; i++) { const v = sr.y[i]; if (v === null) continue;
+          const y = Y(v), h = Math.max(0, m.t + ph - y), r = Math.min(4, w / 2, h);
+          const on = sr.highlight === undefined || sr.highlight === i;
+          s += '<path d="M' + (X(i) - w / 2) + ' ' + (m.t + ph) + 'V' + (y + r) + 'q0 ' + (-r) + ' ' + r + ' ' + (-r) + 'H' + (X(i) + w / 2 - r) +
+               'q' + r + ' 0 ' + r + ' ' + r + 'V' + (m.t + ph) + 'Z" fill="' + sr.color + '" opacity="' + (on ? 1 : 0.42) + '"/>'; }
+      } else {
+        let d = '', pen = false;
+        for (let i = 0; i < n; i++) { const v = sr.y[i]; if (v === null) { pen = false; continue; }
+          d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; }
+        s += '<path d="' + d + '" fill="none" stroke="' + sr.color + '" stroke-width="2" stroke-linejoin="round"' +
+             (sr.dash ? ' stroke-dasharray="5 4"' : '') + '/>';
+        if (sr.markers) for (let i = 0; i < n; i++) if (sr.y[i] !== null)
+          s += '<circle cx="' + X(i) + '" cy="' + Y(sr.y[i]) + '" r="3.5" fill="' + sr.color + '" stroke="' + C.card + '" stroke-width="1.5"/>';
+      }
+    });
+    (o.refs || []).forEach(r => { s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(r.y) + '" y2="' + Y(r.y) + '" stroke="' + C.text2 +
+      '" stroke-width="1.5" stroke-dasharray="6 4"/><text x="' + (W - m.r - 4) + '" y="' + (Y(r.y) - 5) + '" text-anchor="end" font-size="11" fill="' + C.text2 + '">' + esc(r.label) + '</text>'; });
+    s += '<line id="xh" x1="0" x2="0" y1="' + m.t + '" y2="' + (m.t + ph) + '" stroke="' + C.muted + '" stroke-width="1" visibility="hidden"/>';
+    s += '<rect x="' + m.l + '" y="' + m.t + '" width="' + pw + '" height="' + ph + '" fill="transparent"/></svg>';
+    const named = o.series.filter(x => x.name);
+    el.innerHTML = (named.length > 1 || o.forceLegend ? legendHtml(named.map(x => ({name: x.name, color: x.color, dash: x.dash, shape: (x.type === 'bar' || x.type === 'band') ? 'sq' : ''}))) : '') + s;
+    const svg = el.querySelector('svg'), xh = svg.querySelector('#xh');
+    svg.addEventListener('mousemove', ev => {
+      const b = svg.getBoundingClientRect(), px = (ev.clientX - b.left) * (W / b.width);
+      const i = Math.floor((px - m.l) / bw);
+      if (i < 0 || i >= n) { hideTip(); xh.setAttribute('visibility', 'hidden'); return; }
+      xh.setAttribute('x1', X(i)); xh.setAttribute('x2', X(i)); xh.setAttribute('visibility', 'visible');
+      const rows = o.tooltip ? o.tooltip(i) : o.series.filter(x => x.name && x.type !== 'band').map(x => [x.name, fmt(x.y[i])]);
+      showTip(tipRows(o.tipTitle ? o.tipTitle(i) : o.categories[i], rows), ev);
+    });
+    svg.addEventListener('mouseleave', () => { hideTip(); xh.setAttribute('visibility', 'hidden'); });
+  };
+  draw(); el._redraw = draw;
+}
+
+/* ---- numeric scatter (linear or log axes) ----------------------------------------------- */
+function scatterChart(el, o) {
+  const draw = () => {
+    const W = Math.max(300, el.clientWidth), H = o.height || 250, m = {l: 54, r: 14, t: 8, b: 42};
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const tx = v => o.xLog ? Math.log10(v) : v, ty = v => o.yLog ? Math.log10(v) : v;
+    const X = v => m.l + (tx(v) - tx(o.xMin)) / (tx(o.xMax) - tx(o.xMin)) * pw;
+    const Y = v => m.t + ph - (ty(v) - ty(o.yMin)) / (ty(o.yMax) - ty(o.yMin)) * ph;
+    const logTicks = (lo, hi) => { const t = []; for (let e = Math.ceil(Math.log10(lo) - 1e-9); e <= Math.floor(Math.log10(hi) + 1e-9); e++) t.push(Math.pow(10, e)); return t; };
+    const xt = o.xLog ? logTicks(o.xMin, o.xMax) : niceTicks(o.xMin, o.xMax, 5), yt = o.yLog ? logTicks(o.yMin, o.yMax) : niceTicks(o.yMin, o.yMax, 4);
+    let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc(o.aria || '') + '">';
+    yt.forEach(t => { s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + Y(t) + '" y2="' + Y(t) + '" stroke="' + C.grid + '"/><text x="' + (m.l - 7) + '" y="' + (Y(t) + 4) + '" text-anchor="end" font-size="11" fill="' + C.muted + '">' + fmt(t) + '</text>'; });
+    xt.forEach(t => { s += '<line x1="' + X(t) + '" x2="' + X(t) + '" y1="' + m.t + '" y2="' + (m.t + ph) + '" stroke="' + C.grid + '"/><text x="' + X(t) + '" y="' + (m.t + ph + 16) + '" text-anchor="middle" font-size="11" fill="' + C.muted + '">' + fmt(t) + '</text>'; });
+    s += '<text transform="translate(13,' + (m.t + ph / 2) + ') rotate(-90)" text-anchor="middle" font-size="11" fill="' + C.muted + '">' + esc(o.yTitle) + '</text>';
+    s += '<text x="' + (m.l + pw / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="11" fill="' + C.muted + '">' + esc(o.xTitle) + '</text>';
+    const inside = (x, y) => x >= o.xMin && x <= o.xMax && y >= o.yMin && y <= o.yMax;
+    const pts = [];
+    o.series.forEach(sr => {
+      if (sr.type === 'line') {
+        let d = ''; sr.x.forEach((x, i) => { if (inside(x, sr.y[i])) d += (d ? 'L' : 'M') + X(x) + ' ' + Y(sr.y[i]); });
+        s += '<path d="' + d + '" fill="none" stroke="' + sr.color + '" stroke-width="2"' + (sr.dash ? ' stroke-dasharray="5 4"' : '') + '/>';
+      } else sr.x.forEach((x, i) => { if (!inside(x, sr.y[i])) return;
+        s += '<circle cx="' + X(x) + '" cy="' + Y(sr.y[i]) + '" r="' + (sr.r || 4) + '" fill="' + sr.color + '" fill-opacity="' + (sr.opacity || 1) + '" stroke="' + C.card + '" stroke-width="' + (sr.ring === false ? 0 : 1) + '"/>';
+        pts.push({px: X(x), py: Y(sr.y[i]), sr: sr, i: i}); });
+    });
+    s += '<rect x="' + m.l + '" y="' + m.t + '" width="' + pw + '" height="' + ph + '" fill="transparent"/></svg>';
+    const named = o.series.filter(x => x.name);
+    el.innerHTML = (named.length > 1 ? legendHtml(named.map(x => ({name: x.name, color: x.color, dash: x.dash, shape: x.type === 'line' ? '' : 'sq'}))) : '') + s;
+    const svg = el.querySelector('svg');
+    svg.addEventListener('mousemove', ev => {
+      const b = svg.getBoundingClientRect(), px = (ev.clientX - b.left) * (W / b.width), py = (ev.clientY - b.top) * (H / b.height);
+      let best = null, bd = 18 * 18;
+      pts.forEach(p => { const d = (p.px - px) * (p.px - px) + (p.py - py) * (p.py - py); if (d < bd) { bd = d; best = p; } });
+      if (!best) { hideTip(); return; }
+      showTip(tipRows(best.sr.name || '', best.sr.tip ? best.sr.tip(best.i) : [[o.xTitle, fmt(best.sr.x[best.i])], [o.yTitle, fmt(best.sr.y[best.i])]]), ev);
+    });
+    svg.addEventListener('mouseleave', hideTip);
+  };
+  draw(); el._redraw = draw;
+}
+
+/* ---- calendar heat map (year x day of year) ---------------------------------------------- */
+function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+function doyDate(y, d) { if (d === 366 && !isLeap(y)) return null; const t = new Date(Date.UTC(y, 0, d)); return t.toISOString().slice(0, 10); }
+function heatmap(el, o) {
+  const draw = () => {
+    const years = o.years, ny = years.length, W = Math.max(360, el.clientWidth);
+    const mL = 44, mR = 6, mT = 4, mB = 22, cw = (W - mL - mR) / 366, ch = Math.max(9, Math.min(22, Math.round(420 / ny)));
+    const H = mT + ny * ch + mB, dpr = window.devicePixelRatio || 1;
+    let vmax = 0;
+    if (!o.categorical) { const pos = []; o.matrix.forEach(r => r.forEach(v => { if (v !== null && v > 0) pos.push(v); }));
+      pos.sort((a, b) => a - b); vmax = pos.length ? pos[Math.min(pos.length - 1, Math.floor(pos.length * 0.995))] : 1; }
+    const color = v => { if (v === null) return C.nodata; if (o.categorical) return o.categorical[v] || C.nodata;
+      if (v <= 0) return C.zero; const t = Math.min(1, Math.sqrt(v / vmax)); return RAMP[Math.min(RAMP.length - 1, Math.floor(t * RAMP.length))]; };
+    let legend;
+    if (o.categorical) legend = legendHtml(Object.keys(o.categorical).map(k => ({name: o.labels[k], color: o.categorical[k], shape: 'sq'})).concat([{name: 'no data', color: C.nodata, shape: 'sq'}]));
+    else legend = '<div class="legend"><span><i class="sq" style="background:' + C.nodata + '"></i>no data</span><span><i class="sq" style="background:' + C.zero +
+      '"></i>observed, none reported</span><span>low <i style="width:120px;height:10px;margin:0 6px;background:linear-gradient(90deg,' + RAMP.join(',') + ')"></i>' +
+      'high (' + fmt(vmax) + '+ ' + esc(o.unit) + ', square-root scale)</span></div>';
+    el.innerHTML = legend + '<canvas width="' + Math.round(W * dpr) + '" height="' + Math.round(H * dpr) + '" style="width:' + W + 'px;height:' + H + 'px" role="img" aria-label="' + esc(o.aria || '') + '"></canvas>';
+    const cv = el.querySelector('canvas'), g = cv.getContext('2d'); g.scale(dpr, dpr);
+    g.fillStyle = C.card; g.fillRect(0, 0, W, H);
+    for (let r = 0; r < ny; r++) { const row = o.matrix[r], y = mT + (ny - 1 - r) * ch;
+      for (let d = 0; d < 366; d++) { g.fillStyle = color(row[d]); g.fillRect(mL + d * cw, y, Math.ceil(cw), ch - 1); } }
+    g.fillStyle = C.muted; g.font = '11px system-ui, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'right';
+    const skip = ch >= 13 ? 1 : 2;
+    for (let r = 0; r < ny; r++) if ((years[r] % skip) === 0) g.fillText(String(years[r]), mL - 6, mT + (ny - 1 - r) * ch + ch / 2);
+    g.textAlign = 'left'; g.textBaseline = 'top';
+    [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335].forEach((d, i) => g.fillText(MONTHS[i], mL + (d - 1) * cw + 2, mT + ny * ch + 5));
+    cv.addEventListener('mousemove', ev => {
+      const b = cv.getBoundingClientRect(), x = ev.clientX - b.left, y = ev.clientY - b.top;
+      const d = Math.floor((x - mL) / cw), r = ny - 1 - Math.floor((y - mT) / ch);
+      if (d < 0 || d > 365 || r < 0 || r >= ny) { hideTip(); return; }
+      const date = doyDate(years[r], d + 1), v = o.matrix[r][d];
+      if (!date) { showTip(tipRows(years[r] + ', day 366', [['', 'not a leap year']]), ev); return; }
+      showTip(tipRows(date, o.tip(r, d, v)), ev);
+    });
+    cv.addEventListener('mouseleave', hideTip);
+  };
+  draw(); el._redraw = draw;
+}
+
+/* ---- application ------------------------------------------------------------------------- */
+let META = null, A = null, calView = 'harmonized_cells', calTarget = null, map = null, mapLayer = null, mapBox = null;
+
+async function getJSON(url) {
+  const r = await fetch(url);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || ('Request failed (' + r.status + ')'));
+  return body;
+}
+function selection() {
+  const q = new URLSearchParams();
+  const b = [['west', 'inW'], ['south', 'inS'], ['east', 'inE'], ['north', 'inN']].map(p => [p[0], $(p[1]).value]);
+  const custom = META && META.bbox && b.some((p, i) => Number(p[1]) !== Number(META.bbox[i]));
+  if (custom) b.forEach(p => q.set(p[0], p[1]));
+  if ($('inStart').value && $('inStart').value !== META.start) q.set('start', $('inStart').value);
+  if ($('inEnd').value && $('inEnd').value !== META.end) q.set('end', $('inEnd').value);
+  return q;
+}
+function resetControls() {
+  if (META.bbox) ['inW', 'inS', 'inE', 'inN'].forEach((id, i) => $(id).value = META.bbox[i]);
+  $('inStart').value = META.start || ''; $('inEnd').value = META.end || '';
+}
+
+async function init() {
+  try { META = await getJSON('/api/meta'); } catch (e) { $('content').innerHTML = '<div class="card">Could not reach the server: ' + esc(e.message) + '</div>'; return; }
+  if (META.bbox) META.bbox = [Math.floor(META.bbox[0] * 1000) / 1000, Math.floor(META.bbox[1] * 1000) / 1000,
+                              Math.ceil(META.bbox[2] * 1000) / 1000, Math.ceil(META.bbox[3] * 1000) / 1000];
+  resetControls();
+  $('modeChip').innerHTML = META.synthetic
+    ? '<span class="chip"><span class="dot" style="background:' + C.warn + '"></span>⚠ Synthetic demo data</span>'
+    : '<span class="chip"><span class="dot" style="background:#0ca30c"></span>NASA FIRMS data</span>';
+  $('btnApply').onclick = load;
+  $('btnReset').onclick = () => { resetControls(); load(); };
+  $('btnView').onclick = () => { if (!map) return; const b = map.getBounds();
+    $('inW').value = b.getWest().toFixed(3); $('inS').value = b.getSouth().toFixed(3); $('inE').value = b.getEast().toFixed(3); $('inN').value = b.getNorth().toFixed(3); };
+  await load();
+}
+
+async function load() {
+  const q = selection().toString();
+  $('content').innerHTML = '<div class="loading">Analysing…</div>';
+  ['Daily', 'Monthly', 'Det'].forEach((k, i) => $('dl' + k).href = '/api/export/' + ['daily', 'monthly', 'detections'][i] + '.csv' + (q ? '?' + q : ''));
+  try { A = await getJSON('/api/analysis' + (q ? '?' + q : '')); }
+  catch (e) { $('content').innerHTML = '<div class="card"><div class="warn">' + esc(e.message) + '</div></div>'; return; }
+  render();
+}
+
+function render() {
+  renderBanner();
+  if (A.empty) { $('content').innerHTML = '<div class="card">' + esc(A.message) + '</div>'; $('selNote').textContent = ''; return; }
+  const b = A.area.bbox_west_south_east_north;
+  $('selNote').textContent = 'Showing ' + A.period.start + ' to ' + A.period.end + (b ? ' · area ' + b.map(v => fmt(v, 2)).join(', ') + ' (W, S, E, N)' : '') +
+    ' · dates are local solar dates · grid cells of ' + A.area.cell_km + ' km';
+  const targets = Object.keys(A.calibrations);
+  if (!calTarget || !A.calibrations[calTarget]) calTarget = (A.headline_validation && A.headline_validation.target) || targets[0] || null;
+  $('content').innerHTML =
+    '<div style="display:grid;gap:16px">' +
+    '<section class="tiles" id="tiles"></section>' +
+    '<section class="card"><h2>Burning activity calendar</h2><p class="sub" id="calSub"></p><div class="tabs" id="calTabs"></div><div class="chart" id="calendar"></div><p class="note" id="calNote"></p></section>' +
+    '<section class="card"><h2>Does the harmonisation work? Held-out test against Aqua MODIS</h2><p class="sub">Every method is fitted on some years and scored on years it has not seen. ' +
+      'The reference is what Aqua MODIS actually reported in those months. A method is only used if it wins this test.</p><div id="validation"></div></section>' +
+    '<div class="grid2"><section class="card"><h2>Is this month unusual?</h2><p class="sub">Harmonised activity in a month compared with the same calendar month in the other years of the record.</p><div id="anomaly"></div></section>' +
+      '<section class="card"><h2>Critical periods of the year</h2><p class="sub">Typical weekly activity across all years with full coverage.</p><div id="critical"></div></section></div>' +
+    '<div class="grid2"><section class="card"><h2>Fire season timing</h2><p class="sub">Days by which 10 %, 50 % and 90 % of a fire year\'s harmonised active cells had accumulated.</p><div id="season"></div></section>' +
+      '<section class="card"><h2>How the sensors differ</h2><p class="sub">Same grid cell, same half-day, both platforms delivering data.</p><div id="sensors"></div></section></div>' +
+    '<section class="card"><h2>Hot-spot clusters on the map</h2><p class="sub">Adjacent fire pixels from one platform in one overpass, grouped by great-circle distance. A cluster is not a confirmed fire.</p><div id="mapBox"></div></section>' +
+    '<section class="card"><h2>Data, coverage and quality control</h2><div id="prov"></div></section>' +
+    '<section class="card"><h2>Method and limits</h2><div id="methods"></div></section></div>';
+  renderTiles(); renderCalendar(); renderValidation(); renderAnomaly(); renderCritical(); renderSeason(); renderSensors(); renderMap(); renderProvenance(); renderMethods();
+}
+
+function renderBanner() {
+  if (A.synthetic) $('banner').innerHTML = '<div class="banner synthetic"><div class="icon">⚠</div><div><strong>Synthetic demonstration data. These are not satellite observations.</strong>' +
+    '<span>The numbers below come from a simulator (engine/synthetic.py) so the method can be tested against a known truth. They say nothing about real fire activity. ' +
+    (META.why_synthetic ? 'Reason: ' + esc(META.why_synthetic) + '. ' : '') + 'To use real data, run data/download_nasa_firms.py and restart.</span></div></div>';
+  else { const f = (META.files || []).map(x => esc(x.source) + ' (' + fmt(x.rows, 0) + ' rows)').join(', ');
+    $('banner').innerHTML = '<div class="banner"><div class="icon">🛰</div><div><strong>NASA FIRMS active-fire data</strong><span>' + f +
+      (META.manifest && META.manifest.retrieved_utc ? ' · retrieved ' + esc(META.manifest.retrieved_utc) : '') + '</span></div></div>'; }
+}
+
+function renderTiles() {
+  const h = A.headline_validation, src = {1: 0, 2: 0, 3: 0};
+  A.calendar.source.forEach(r => r.forEach(v => { if (v) src[v]++; }));
+  let t = '';
+  if (h) {
+    t += '<div class="tile"><div class="k">Raw hot-spot counts, ' + esc(h.target_label) + ' vs Aqua MODIS</div><div class="v">' + pct(h.raw_hotspot_bias_pct) + '</div><div class="d">difference in held-out months before any harmonisation</div></div>';
+    t += '<div class="tile"><div class="k">After harmonisation</div><div class="v">' + pct(h.harmonised_bias_pct) + '</div><div class="d">total difference from Aqua MODIS in ' + fmt(h.held_out_months, 0) + ' held-out months</div></div>';
+    t += '<div class="tile"><div class="k">Typical monthly error</div><div class="v">' + fmt(h.harmonised_median_abs_pct_error, 1) + ' %</div><div class="d">median absolute error, held-out months</div></div>';
+  } else t += '<div class="tile" style="grid-column:span 3"><div class="k">Harmonisation</div><div class="v" style="font-size:16px">Not validated for this selection</div><div class="d">See the validation section for the reason.</div></div>';
+  t += '<div class="tile"><div class="k">Days in the harmonised record</div><div class="v">' + fmt(src[1] + src[2] + src[3], 0) + '</div><div class="d">' + fmt(src[1], 0) + ' Aqua observed · ' + fmt(src[2], 0) + ' VIIRS-derived · ' + fmt(src[3], 0) + ' Terra-derived</div></div>';
+  $('tiles').innerHTML = t;
+}
+
+const CAL_VIEWS = [
+  ['harmonized_cells', 'Harmonised active cells'], ['harmonized_frp_mw', 'Harmonised FRP'],
+  ['modis_hotspots', 'Raw MODIS hot spots'], ['viirs_hotspots', 'Raw VIIRS hot spots'], ['source', 'Where each day comes from']];
+function renderCalendar() {
+  $('calTabs').innerHTML = CAL_VIEWS.map(v => '<button data-v="' + v[0] + '" class="' + (v[0] === calView ? 'on' : '') + '">' + v[1] + '</button>').join('');
+  $('calTabs').querySelectorAll('button').forEach(b => b.onclick = () => { calView = b.dataset.v; renderCalendar(); });
+  const cal = A.calendar, lab = cal.source_labels;
+  const units = {harmonized_cells: 'cells', harmonized_frp_mw: 'MW', modis_hotspots: 'hot spots', viirs_hotspots: 'hot spots'};
+  const subs = {
+    harmonized_cells: 'One consistent series on the Aqua MODIS scale: ' + A.units.harmonized_cells + '.',
+    harmonized_frp_mw: A.units.harmonized_frp_mw,
+    modis_hotspots: 'Fire pixels as reported by MODIS (Terra + Aqua). Not comparable with the VIIRS view.',
+    viirs_hotspots: 'Fire pixels as reported by VIIRS (all platforms present). Smaller pixels and more satellites mean more hot spots for the same fire.',
+    source: 'Which observation the harmonised value of each day is based on.'};
+  $('calSub').textContent = subs[calView];
+  const srcTip = (r, d) => { const s = cal.source[r][d]; return ['Based on', s ? lab[s] : lab[0]]; };
+  if (calView === 'source') heatmap($('calendar'), {years: cal.years, matrix: cal.source, categorical: {1: C.s1, 2: C.s3, 3: C.s2}, labels: lab,
+    aria: 'Source of each day of the harmonised record', tip: (r, d) => [srcTip(r, d)]});
+  else heatmap($('calendar'), {years: cal.years, matrix: cal[calView], unit: units[calView], aria: 'Calendar heat map: ' + calView,
+    tip: (r, d, v) => { const rows = [[units[calView], v === null ? 'no data' : fmt(v)]]; if (calView.startsWith('harmonized')) rows.push(srcTip(r, d)); return rows; }});
+  $('calNote').textContent = 'Grey means no data for that day. It is never shown as zero. Colour uses a square-root scale so that ordinary days stay visible next to extreme ones.';
+}
+
+function methodTable(kind, cal) {
+  const cv = cal.cross_validation[kind], fw = cal.forward_in_time_test ? cal.forward_in_time_test[kind] : null;
+  const sel = kind === 'count' ? cal.selected_count_method : cal.selected_frp_method;
+  let t = '<table><thead><tr><th>Method</th><th class="num">Total bias</th><th class="num">Median monthly error</th><th class="num">Rank corr.</th><th class="num">Scaled RMSE</th><th class="num">Forward test bias</th></tr></thead><tbody>';
+  Object.keys(cv).forEach(k => { const s = cv[k]; if (!s.available) return; const f = fw && fw[k] && fw[k].available ? fw[k] : null;
+    t += '<tr class="' + (k === sel ? 'sel' : '') + '"><td>' + esc(cal.method_labels[k] || k) + (k === sel ? '<span class="tag">used</span>' : '') + '</td><td class="num">' + pct(s.total_bias_pct) +
+      '</td><td class="num">' + (s.median_abs_pct_error === null ? '–' : fmt(s.median_abs_pct_error, 1) + ' %') + '</td><td class="num">' + fmt(s.spearman_r, 3) + '</td><td class="num">' + fmt(s.scaled_rmse, 3) +
+      '</td><td class="num">' + (f ? pct(f.total_bias_pct) : '–') + '</td></tr>'; });
+  return t + '</tbody></table>';
+}
+function renderValidation() {
+  const targets = Object.keys(A.calibrations), box = $('validation');
+  if (!targets.length) { box.innerHTML = '<div class="warn">' + esc((A.notes || []).join(' ') || 'No second platform to compare with Aqua MODIS in this selection.') + '</div>'; return; }
+  const cal = A.calibrations[calTarget];
+  let h = '<div class="controls" style="margin-bottom:10px"><label>Platform converted to the Aqua MODIS scale<select id="selTarget">' +
+    targets.map(t => '<option value="' + t + '"' + (t === calTarget ? ' selected' : '') + '>' + esc(platformLabel(t)) + (A.calibrations[t].status === 'calibrated' ? '' : ' (not calibrated)') + '</option>').join('') + '</select></label></div>';
+  if (cal.status !== 'calibrated') {
+    h += '<div class="warn"><b>Not calibrated, and not used in the harmonised record.</b> ' + esc(cal.reason) + '. No numbers are shown because none could be validated.</div>';
+    box.innerHTML = h; $('selTarget').onchange = e => { calTarget = e.target.value; renderValidation(); renderSensors(); }; return; }
+  const mt = cal.matching;
+  h += '<p class="note" style="margin:0 0 8px">Test design: ' + esc(cal.validation_design) + '. Matched observations: ' + fmt(mt.both_active, 0) + ' cells seen by both, ' + fmt(mt.target_only, 0) +
+    ' only by ' + esc(platformLabel(calTarget)) + ', ' + fmt(mt.reference_only, 0) + ' only by Aqua MODIS, over ' + fmt(mt.overlap_months, 0) + ' months. Median time between the two overpasses: ' +
+    fmt(mt.median_time_difference_min, 0) + ' min.</p><div class="chart" id="valChart"></div>' +
+    '<h3>Active fire cells per month</h3>' + methodTable('count', cal) + '<h3>Fire radiative power (monthly sum of overpass snapshots)</h3>' + methodTable('frp', cal) +
+    '<p class="note">Rule: ' + esc(cal.selection_rule) + '. "Total bias" compares summed predictions with summed Aqua MODIS observations over all held-out months. ' +
+    'The first row compares raw hot-spot counts with raw Aqua hot-spot counts. "Forward test" fits on the earliest 70 % of the overlap and predicts the rest.</p>';
+  box.innerHTML = h;
+  $('selTarget').onchange = e => { calTarget = e.target.value; renderValidation(); renderSensors(); };
+  const m = cal.held_out_monthly;
+  catChart($('valChart'), {categories: m.month, height: 250, yTitle: 'active cells per month', labelWidth: 64, aria: 'Held-out monthly comparison',
+    series: [{name: 'Aqua MODIS observed', color: C.s1, y: m.observed_reference_cells},
+             {name: platformLabel(calTarget) + ' on a common grid, uncalibrated', color: C.s2, y: m.gridded_cells, dash: true},
+             {name: platformLabel(calTarget) + ' harmonised (held-out prediction)', color: C.s3, y: m.selected_count}]});
+}
+function platformLabel(p) { const row = (A.platforms || []).find(x => x.platform === p); return row ? row.label : p; }
+
+const CAT_COLOR = {'exceptionally high': '#d03b3b', 'above normal': '#ec835a', 'near normal': '#94938b', 'below normal': '#3987e5', 'exceptionally low': '#3987e5'};
+const CAT_ICON = {'exceptionally high': '▲▲', 'above normal': '▲', 'near normal': '●', 'below normal': '▼', 'exceptionally low': '▼▼'};
+let anomalyMonth = null;
+function renderAnomaly() {
+  const M = A.monthly, n = M.period.length, usable = [];
+  for (let i = 0; i < n; i++) if (CAT_COLOR[M.category[i]]) usable.push(i);
+  const box = $('anomaly');
+  if (!usable.length) { box.innerHTML = '<div class="warn">Not enough data for a baseline: an anomaly needs the same calendar month in at least five other years, each with 80 % or more coverage.</div>'; return; }
+  if (anomalyMonth === null || !usable.some(i => M.period[i] === anomalyMonth)) {
+    const inSeason = usable.filter(k => M.baseline_median[k] > 0);   // most recent month in which burning is normal
+    anomalyMonth = M.period[(inSeason.length ? inSeason : usable).slice(-1)[0]]; }
+  const i = M.period.indexOf(anomalyMonth), cat = M.category[i], mon = M.month[i];
+  const derived = M.days_viirs_derived[i] + M.days_terra_derived[i];
+  let h = '<div class="controls" style="margin-bottom:10px"><label>Month<select id="selMonth">' + usable.slice().reverse().map(k => '<option' + (M.period[k] === anomalyMonth ? ' selected' : '') + '>' + M.period[k] + '</option>').join('') + '</select></label></div>';
+  h += '<div class="tile" style="background:var(--card2)"><div class="k">' + MONTHS[mon - 1] + ' ' + M.year[i] + ' · harmonised active cells</div><div class="v">' + fmt(M.cells[i]) +
+    ' <span style="font-size:14px;font-weight:500;color:var(--text2)">' + (M.anomaly_pct[i] === null ? '' : pct(M.anomaly_pct[i]) + ' vs. median ' + fmt(M.baseline_median[i])) + '</span></div>' +
+    '<div class="d"><span class="status"><span style="color:' + CAT_COLOR[cat] + '">' + CAT_ICON[cat] + '</span>' + esc(cat) + '</span> · percentile ' + fmt(M.percentile[i], 0) + ' of ' + M.baseline_n[i] +
+    ' other years · coverage ' + fmt(100 * M.coverage[i], 0) + ' %' + (derived > 0 ? ' · 90 % range ' + fmt(M.cells_low[i]) + ' to ' + fmt(M.cells_high[i]) + ' (' + derived + ' days sensor-converted)' : ' · all days observed by Aqua MODIS') + '</div></div>';
+  h += '<div class="chart" id="anChart" style="margin-top:10px"></div><h3>Most unusual months in the record</h3><div id="anTable"></div>';
+  box.innerHTML = h;
+  $('selMonth').onchange = e => { anomalyMonth = e.target.value; renderAnomaly(); };
+  const idx = []; for (let k = 0; k < n; k++) if (M.month[k] === mon) idx.push(k);
+  const ok = k => M.coverage[k] >= 0.8 && M.cells[k] !== null;
+  catChart($('anChart'), {categories: idx.map(k => String(M.year[k])), height: 210, yTitle: 'active cells in ' + MONTHS[mon - 1], labelWidth: 40, aria: 'Same calendar month across years',
+    series: [{name: MONTHS[mon - 1] + ' total', type: 'bar', color: C.s3, y: idx.map(k => ok(k) ? M.cells[k] : null), highlight: idx.indexOf(i)}],
+    refs: [{y: M.baseline_median[i], label: 'median of other years'}],
+    tooltip: j => { const k = idx[j]; return ok(k) ? [['active cells', fmt(M.cells[k])], ['coverage', fmt(100 * M.coverage[k], 0) + ' %']] : [['', 'coverage too low']]; }});
+  const top = usable.filter(k => M.anomaly_abs[k] !== null).sort((a, b) => M.percentile[b] - M.percentile[a] || M.anomaly_abs[b] - M.anomaly_abs[a]).slice(0, 6);
+  $('anTable').innerHTML = '<table><thead><tr><th>Month</th><th class="num">Cells</th><th class="num">Median</th><th class="num">Anomaly</th><th>Class</th></tr></thead><tbody>' +
+    top.map(k => '<tr><td>' + M.period[k] + '</td><td class="num">' + fmt(M.cells[k]) + '</td><td class="num">' + fmt(M.baseline_median[k]) + '</td><td class="num">' + pct(M.anomaly_pct[k]) + '</td><td>' + esc(M.category[k]) + '</td></tr>').join('') + '</tbody></table>';
+}
+
+function doyLabel(d) { const t = new Date(Date.UTC(2001, 0, d)); return MONTHS[t.getUTCMonth()] + ' ' + t.getUTCDate(); }
+function renderCritical() {
+  const w = A.critical_periods.weekly_climatology, cw = A.critical_periods.critical_weeks, core = A.seasonality.core_season_80pct, box = $('critical');
+  if (!cw.available) { box.innerHTML = '<div class="warn">' + esc(cw.reason || 'Not available.') + '</div>'; return; }
+  box.innerHTML = '<div class="chart" id="critChart"></div><p class="note"><b style="color:var(--text)">Peak week starts ' + esc(cw.peak_week_starts) + '.</b> Weeks with at least half of the peak week\'s typical activity: ' +
+    esc(cw.starts[0]) + ' to the week of ' + esc(cw.starts[cw.starts.length - 1]) + ' (' + cw.weeks.length + ' weeks).' +
+    (core ? ' The shortest stretch holding 80 % of typical yearly activity runs from ' + doyLabel(core.start_doy) + ' to ' + doyLabel(core.end_doy) + ' (' + core.length_days + ' days).' : '') + '</p>';
+  const flag = new Set(cw.weeks);
+  catChart($('critChart'), {categories: w.map(x => x.starts), height: 230, yTitle: 'active cells per week', labelWidth: 52, forceLegend: true, aria: 'Weekly climatology',
+    series: [{name: 'Typical week (median across years)', type: 'bar', color: C.s3, y: w.map(x => x.median)},
+             {name: 'Busy week (upper quartile)', color: C.s2, y: w.map(x => x.q75)}],
+    tooltip: j => [['median', fmt(w[j].median)], ['upper quartile', fmt(w[j].q75)], ['highest on record', fmt(w[j].max)], ['years', String(w[j].n_years)], ['critical week', flag.has(w[j].week) ? 'yes' : 'no']],
+    tipTitle: j => 'Week starting ' + w[j].starts});
+}
+
+function renderSeason() {
+  const fy = A.seasonality.fire_years.filter(x => x.usable), box = $('season'), tr = A.seasonality.trends;
+  if (fy.length < 2) { box.innerHTML = '<div class="warn">Fewer than two fire years have 90 % coverage and enough activity for stable percentiles.</div>'; return; }
+  const trendText = (t, what) => !t.available ? what + ': ' + esc(t.reason) + '.' :
+    what + ': ' + (t.slope_per_decade > 0 ? '+' : '') + fmt(t.slope_per_decade, 1) + ' ' + esc(t.unit) + ' per decade (95 % interval ' + fmt(t.slope_95ci[0] * 10, 1) + ' to ' + fmt(t.slope_95ci[1] * 10, 1) +
+    ', p = ' + fmt(t.p_value, 2) + ', ' + t.n_years + ' fire years): ' + (t.significant_at_5pct ? 'a statistically detectable change' : 'no statistically detectable change') + '.';
+  box.innerHTML = '<div class="chart" id="seasonChart"></div><p class="note">Fire years start on ' + doyLabel(A.seasonality.fire_year_start_doy) + ', the quietest time of year in this area, so a season that crosses New Year is not cut in two.</p>' +
+    '<ul class="plain"><li>' + trendText(tr.season_length, 'Season length (10 % to 90 %)') + '</li><li>' + trendText(tr.annual_total, 'Yearly total') + '</li></ul>' +
+    '<p class="note">These are observed changes in a satellite record that mixes sensors. No cause is assigned: a change can come from fire activity, land use, the observing system, or chance.</p>';
+  catChart($('seasonChart'), {categories: fy.map(x => x.fire_year), height: 230, yTitle: 'days after fire-year start', labelWidth: 52, aria: 'Season timing by fire year',
+    series: [{name: '10 % reached (season start)', color: C.s1, y: fy.map(x => x.p10_day), markers: fy.length < 40},
+             {name: '50 % reached (midpoint)', color: C.s2, y: fy.map(x => x.p50_day), markers: fy.length < 40},
+             {name: '90 % reached (season end)', color: C.s3, y: fy.map(x => x.p90_day), markers: fy.length < 40}],
+    tooltip: j => [['10 %', fy[j].p10_date], ['50 %', fy[j].p50_date], ['90 %', fy[j].p90_date], ['length', fy[j].season_length_days + ' days'], ['cells', fmt(fy[j].total_cells)]],
+    tipTitle: j => 'Fire year ' + fy[j].fire_year});
+}
+
+function renderSensors() {
+  const cal = calTarget ? A.calibrations[calTarget] : null, box = $('sensors');
+  if (!cal || cal.status !== 'calibrated') { box.innerHTML = '<div class="warn">No validated comparison for this platform.</div>'; return; }
+  const d = cal.diagnostics, name = platformLabel(calTarget);
+  let h = '';
+  if (d.detection_by_frp) h += '<h3 style="margin-top:0">How often Aqua MODIS also reports a cell that ' + esc(name) + ' reports</h3><div class="chart" id="detChart"></div>';
+  if (d.frp_pairs_sample) h += '<h3>FRP of cells reported by both (' + fmt(d.frp_pairs_total, 0) + ' pairs, ' + d.frp_pairs_sample.length + ' shown)</h3><div class="chart" id="frpChart"></div>';
+  const a = d.frp_fit_all_pairs, c = d.frp_fit_within_15_min;
+  if (a) h += '<p class="note">Log-log fit, all pairs: slope ' + fmt(a.slope, 2) + ', R² ' + fmt(a.r2, 2) + ' (n = ' + fmt(a.n, 0) + ').' +
+    (c ? ' Only pairs within 15 minutes: slope ' + fmt(c.slope, 2) + ', R² ' + fmt(c.r2, 2) + ' (n = ' + fmt(c.n, 0) + ').' : ' Too few pairs within 15 minutes for a separate fit.') + '</p>';
+  box.innerHTML = h || '<div class="warn">Too few matched observations for diagnostics.</div>';
+  if (d.detection_by_frp) { const r = d.detection_by_frp, xs = r.map(x => x.target_frp_mw);
+    scatterChart($('detChart'), {height: 210, xLog: true, xMin: Math.min.apply(null, xs) * 0.8, xMax: Math.max.apply(null, xs) * 1.25, yMin: 0, yMax: 1,
+      xTitle: name + ' cell FRP (MW, log scale)', yTitle: 'share also seen by Aqua', aria: 'Detection probability by FRP',
+      series: [{name: 'Fitted detection model', type: 'line', color: C.s3, x: xs, y: r.map(x => x.model_rate)},
+               {name: 'Observed (FRP deciles)', color: C.s1, x: xs, y: r.map(x => x.observed_rate), r: 4.5, tip: i => [['FRP', fmt(r[i].target_frp_mw) + ' MW'], ['observed', fmt(100 * r[i].observed_rate, 0) + ' %'], ['model', fmt(100 * r[i].model_rate, 0) + ' %'], ['cells', fmt(r[i].n, 0)]]}]}); }
+  if (d.frp_pairs_sample) { const p = d.frp_pairs_sample, all = p.map(x => x.target_frp_mw).concat(p.map(x => x.reference_frp_mw));
+    const lo = Math.pow(10, Math.floor(Math.log10(Math.min.apply(null, all)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max.apply(null, all))));
+    scatterChart($('frpChart'), {height: 250, xLog: true, yLog: true, xMin: lo, xMax: hi, yMin: lo, yMax: hi, xTitle: name + ' FRP (MW)', yTitle: 'Aqua MODIS FRP (MW)', aria: 'FRP pairs',
+      series: [{name: 'Equal FRP (1:1)', type: 'line', color: C.muted, dash: true, x: [lo, hi], y: [lo, hi]},
+               {name: 'Cell seen by both', color: C.s1, opacity: 0.55, r: 3, ring: false, x: p.map(x => x.target_frp_mw), y: p.map(x => x.reference_frp_mw),
+                tip: i => [[name, fmt(p[i].target_frp_mw) + ' MW'], ['Aqua MODIS', fmt(p[i].reference_frp_mw) + ' MW'], ['time apart', p[i].dt_min === null ? '–' : fmt(p[i].dt_min, 0) + ' min']]}]}); }
+}
+
+function renderMap() {
+  const M = A.monthly; let best = 0;
+  for (let i = 0; i < M.period.length; i++) if ((M.cells[i] || 0) > (M.cells[best] || 0)) best = i;
+  const from = M.period[best] + '-01', to = M.period[best] + '-10';
+  $('mapBox').innerHTML = '<div class="controls" style="margin-bottom:10px"><label>From<input type="date" id="mapFrom" value="' + from + '"></label><label>To<input type="date" id="mapTo" value="' + to +
+    '"></label><label>Clustering radius (km)<input type="number" id="mapEps" value="2" min="0.2" max="20" step="0.5"></label><button id="mapGo">Show clusters</button><button id="sensGo">Radius sensitivity</button></div>' +
+    (window.L && !window.LEAFLET_FAILED ? legendHtml([{name: 'MODIS cluster', color: C.s1, shape: 'sq'}, {name: 'VIIRS cluster', color: C.s2, shape: 'sq'}]) : '') + '<div id="map"></div><p class="note" id="mapNote"></p><div id="sensBox"></div>';
+  map = null; mapLayer = null;
+  if (window.L && !window.LEAFLET_FAILED) {
+    map = L.map('map', {preferCanvas: true});
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 17, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics'}).addTo(map);
+    mapLayer = L.layerGroup().addTo(map);
+    const b = A.area.bbox_west_south_east_north;
+    if (b) { L.rectangle([[b[1], b[0]], [b[3], b[2]]], {color: '#f0efec', weight: 1, fill: false, dashArray: '4 4'}).addTo(map); map.fitBounds([[b[1], b[0]], [b[3], b[2]]]); }
+  } else { $('map').style.height = 'auto'; $('map').style.padding = '10px'; $('map').innerHTML = '<div class="loading">Loading clusters…</div>'; }
+  $('mapGo').onclick = loadClusters; $('sensGo').onclick = loadSensitivity;
+  loadClusters();
+}
+async function loadClusters() {
+  const q = selection(); q.set('date_from', $('mapFrom').value); q.set('date_to', $('mapTo').value); q.set('eps_km', $('mapEps').value);
+  let r; try { r = await getJSON('/api/clusters?' + q.toString()); } catch (e) { $('mapNote').textContent = e.message; return; }
+  if (r.error) { $('mapNote').textContent = r.error; return; }
+  $('mapNote').textContent = fmt(r.detections, 0) + ' detections form ' + fmt(r.total_clusters, 0) + ' clusters at a radius of ' + r.eps_km + ' km' +
+    (r.shown < r.total_clusters ? '; the ' + r.shown + ' largest are drawn' : '') + '. Each satellite overpass is clustered separately, so one fire seen by four satellites appears as four clusters.';
+  if (map) { mapLayer.clearLayers();
+    r.clusters.forEach(c => L.circleMarker([c.lat, c.lon], {radius: Math.min(14, 3 + Math.sqrt(c.n_pixels)), color: '#1a1a19', weight: 1, fillColor: c.sensor === 'MODIS' ? C.s1 : C.s2, fillOpacity: 0.8})
+      .bindPopup('<b>' + esc(c.platform) + '</b> ' + esc(c.time_utc) + ' UTC<br>' + c.n_pixels + ' fire pixels · FRP sum ' + fmt(c.frp_sum_mw) + ' MW<br>local date ' + esc(c.local_date) + ' (' + esc(c.slot) + ') · ' + esc(c.processing)).addTo(mapLayer));
+  } else if (!r.clusters.length || !A.area.bbox_west_south_east_north) {
+    $('map').innerHTML = '<div class="loading">No detections in this window.</div>';
+  } else {
+    const b = A.area.bbox_west_south_east_north, by = sen => r.clusters.filter(c => c.sensor === sen);
+    const ser = (sen, col) => ({name: sen + ' cluster', color: col, r: 4, opacity: 0.85, x: by(sen).map(c => c.lon), y: by(sen).map(c => c.lat),
+      tip: i => { const c = by(sen)[i]; return [['platform', c.platform], ['time (UTC)', c.time_utc], ['fire pixels', String(c.n_pixels)], ['FRP sum', fmt(c.frp_sum_mw) + ' MW']]; }});
+    $('map').innerHTML = '<p class="note" style="margin:0 0 6px">Base map not loaded (no internet connection). Cluster positions are plotted by longitude and latitude instead.</p><div class="chart" id="mapPlain"></div>';
+    scatterChart($('mapPlain'), {height: 340, xMin: b[0], xMax: b[2], yMin: b[1], yMax: b[3], xTitle: 'longitude (degrees east)', yTitle: 'latitude (degrees north)', aria: 'Cluster positions',
+      series: [ser('MODIS', C.s1), ser('VIIRS', C.s2)]});
+  }
+}
+async function loadSensitivity() {
+  $('sensBox').innerHTML = '<p class="note">Computing…</p>';
+  let r; try { r = await getJSON('/api/sensitivity?' + selection().toString()); } catch (e) { $('sensBox').innerHTML = '<div class="warn">' + esc(e.message) + '</div>'; return; }
+  $('sensBox').innerHTML = '<h3>Cluster counts depend on the radius (busiest month, ' + esc(r.sample_month) + ')</h3><table><thead><tr><th>Radius</th><th>Sensor</th><th class="num">Detections</th><th class="num">Clusters</th><th class="num">Pixels per cluster</th></tr></thead><tbody>' +
+    r.rows.map(x => '<tr><td>' + x.eps_km + ' km</td><td>' + esc(x.sensor) + '</td><td class="num">' + fmt(x.detections, 0) + '</td><td class="num">' + fmt(x.clusters, 0) + '</td><td class="num">' + fmt(x.pixels_per_cluster, 2) + '</td></tr>').join('') +
+    '</tbody></table><p class="note">Because the number of clusters changes with the chosen radius, clusters are used here for display only. The harmonised record is built on fixed grid cells instead.</p>';
+}
+
+function renderProvenance() {
+  const q = A.quality_control;
+  let h = '<table><thead><tr><th>Platform</th><th>Orbit</th><th class="num">Detections used</th><th>Data coverage</th><th class="num">Days covered</th><th class="num">Days with fire</th><th>Processing</th></tr></thead><tbody>' +
+    A.platforms.map(p => '<tr><td>' + esc(p.label) + '</td><td>' + esc(p.orbit) + '</td><td class="num">' + fmt(p.detections, 0) + '</td><td>' + (p.coverage_start ? p.coverage_start + ' to ' + p.coverage_end : 'none') +
+      '</td><td class="num">' + fmt(p.days_covered, 0) + '</td><td class="num">' + fmt(p.days_with_detections, 0) + '</td><td>' + esc(Object.keys(p.processing_levels).map(k => k + ' ' + fmt(p.processing_levels[k], 0)).join(', ')) + '</td></tr>').join('') + '</tbody></table>';
+  h += '<p class="note">Coverage basis: ' + esc(A.coverage_basis) + '. A covered day without detections means the satellite delivered data and reported no fire; cloud cover on that day is not known from hot-spot files.</p>';
+  h += '<h3>Quality control</h3><ul class="plain"><li>' + fmt(q.input_rows, 0) + ' rows in the selection, ' + fmt(q.output_rows, 0) + ' used.</li><li>Removed: ' + fmt(q.dropped_low_confidence, 0) + ' low-confidence, ' +
+    fmt(q.dropped_non_vegetation_type, 0) + ' non-vegetation sources (volcano, static source, offshore), ' + fmt(q.dropped_duplicates, 0) + ' duplicates, ' + fmt(q.dropped_invalid_position_or_time, 0) + ' without valid position or time, ' +
+    fmt(q.dropped_unknown_platform, 0) + ' from an unidentified satellite.</li><li>' + fmt(q.rows_without_type_field, 0) + ' rows have no "type" field (near-real-time data), so they could not be screened for static heat sources.</li></ul>';
+  if (A.notes && A.notes.length) h += '<h3>Notes</h3><ul class="plain">' + A.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul>';
+  $('prov').innerHTML = h;
+}
+
+function renderMethods() {
+  $('methods').innerHTML = '<ul class="plain">' +
+    '<li><b style="color:var(--text)">Common unit.</b> Hot-spot counts are not comparable: one fire is one MODIS pixel and many VIIRS pixels. Both sensors are reduced to active fire cells (' + A.area.cell_km + ' km equal-area cells per local day or night).</li>' +
+    '<li><b style="color:var(--text)">Reference scale.</b> Everything is expressed as what Aqua MODIS would have reported. A coarse sensor cannot be upgraded to see what it missed; a fine sensor can be degraded. Aqua shares the early-afternoon orbit with all VIIRS satellites.</li>' +
+    '<li><b style="color:var(--text)">Calibration.</b> For each VIIRS cell, a model estimates the chance that Aqua MODIS reports it too, and its expected Aqua FRP. Simple baselines compete with the model on held-out years; the simplest method within 2 % of the best is used.</li>' +
+    '<li><b style="color:var(--text)">Several satellites are averaged, never added.</b> More satellites must not look like more fire.</li>' +
+    '<li><b style="color:var(--text)">What this cannot do.</b> Hot-spot files do not say where the satellite looked and saw nothing, or where cloud hid the ground. FRP values are instantaneous power at overpass time, not energy. ' +
+      'Terra and Aqua have drifted from their original orbits in recent years, which changes their sampling time. A single area does not validate the method elsewhere.</li></ul>' +
+    '<p class="note">Full method, equations and references: docs/METHODS.md in the repository.</p>';
+}
+
+let resizeTimer = null;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => document.querySelectorAll('.chart').forEach(e => e._redraw && e._redraw()), 150); });
+init();
+</script>
+</body>
+</html>

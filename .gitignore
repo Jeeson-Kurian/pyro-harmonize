@@ -40,3 +40,8 @@ data/raw_large/
 # OS files
 .DS_Store
 Thumbs.db
+
+# FIRMS download cache (per-request chunks). The merged CSVs and manifest.json in
+# data/firms/ ARE meant to be committed so the case study is reproducible.
+data/firms/_chunks/
+.pytest_cache/
