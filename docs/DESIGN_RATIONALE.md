@@ -1,39 +1,76 @@
 # What should a fire calendar count when the satellite changes?
 
-The calendar estimates how many grid cells Aqua MODIS would have reported as active. That choice sets a limit on every result below. Agreement with Aqua measures continuity with a historical instrument. Two instruments can agree and still miss a fire under cloud. The regional reports cover April 2018 through December 2024. Each uses its own calibration.
+The calendar estimates how many grid cells Aqua MODIS would have reported as active. Agreement with Aqua therefore measures continuity with a historical instrument, not truth: two instruments can agree and still miss a fire under cloud. The regional results cover April 2018 to December 2024, and each region was calibrated and tested on its own data. Every number below links to the report it comes from.
 
-## From pixels to an observation
+## How these decisions were made
 
-Suppose VIIRS reports eight hot spots along one front during an afternoon pass and Aqua reports one. If all nine points fall in the same grid cell and local half-day, each platform contributes one active cell. PyroHarmonize keeps the pixel counts as features, so the distinction between one detection and eight remains available to the model. Dividing time by local solar day and night also lets a night pass cross midnight without splitting it across two calendar dates. The implementation is in [add_keys and build_cell_table](../engine/gridding.py).
+The first version ([`60ddc6c`](https://github.com/Jeeson-Kurian/pyro-harmonize/commit/60ddc6c), 14 November) counted DBSCAN "fire complexes" and converted VIIRS to MODIS with a point-inflation ratio, with a hard-coded default of 3.65. On 14 November, Jeeson Kurian asked ChatGPT to review the project from the perspective of a technical reviewer and a NASA Space Apps judge. ChatGPT wrote the audit and flagged issues including how observations were matched across sensors and how the models were validated. Jeeson then asked Claude to address the limitations in the audit he uploaded. Claude implemented the redesign in [`694a04b`](https://github.com/Jeeson-Kurian/pyro-harmonize/commit/694a04b) ("Scientific core v2"), which contains the three decisions below. It is not recorded whether the uploaded audit is exactly the version Jeeson reviewed, or where each decision was first proposed. The sections below therefore describe what the code does and what the evidence shows, without assigning the individual choices to a person.
 
-Gridding costs spatial detail. Two nearby fronts can share a cell, and detections on opposite sides of a cell edge can appear unmatched. Northern California gives a sense of the trade-off. At 5, 10 and 25 km, the Suomi-NPP seasonal model's median monthly errors were 14.6%, 13.2% and 11.4%. The coarsest grid scored best on that comparison. It also defines a larger unit of activity. The default 10 km cell is a working resolution, with a sensitivity check in the [California report](case_study/REPORT.md#sensitivity-to-the-grid-cell-size).
+## 1. The observation unit: one active cell per platform and local half-day
 
-## What a missing observation means
+**Behaviour.** Detections are placed in 10 km equal-area cells and local solar half-days (day 06:00–18:00, night 18:00–06:00, labelled with the date the night ends). A cell is active for a platform in a half-day if that platform reported at least one detection there. The pixel count is kept as a model input, and cell FRP is the summed pixel FRP divided by the number of overpasses, the mean per overpass ([`gridding.py`](../engine/gridding.py)). If VIIRS reports eight hot spots along one front and Aqua reports one in the same cell and afternoon, each platform contributes one active cell, and the detection model still sees that VIIRS had eight pixels.
 
-Aqua and the VIIRS platforms sample a similar part of the day. Terra observes earlier. In northern California the median gap for matched Terra–Aqua observations was 190 minutes, compared with 23 minutes for Suomi-NPP–Aqua. Using Aqua as the reference gives the VIIRS conversion a closer comparison in time and retains the scale of the earlier MODIS record. A VIIRS-scale reconstruction of the earlier years would also need to estimate fires the coarser instrument missed.
+**What it replaced.** The DBSCAN complexes of the first version remain only on the map. The reports state that clusters are "used for display only and not for the harmonised record".
 
-A missing match has two possible interpretations. On a date covered by both platforms, a VIIRS-only cell supplies evidence about what Aqua reports. During an Aqua outage, the same VIIRS detection supplies no Aqua label. The matching code first restricts comparisons to dates covered by both, then retains cells seen by either. Coverage comes from download intervals where available. The fallback infers a span from detections, and neither source tells us which ground was visible through clouds. A covered date with zero detections means zero *reported* activity. See [platform_coverage and build_pairs](../engine/matching.py).
+**Evidence.** A later finding shows how much a cluster count depends on its radius. For the same 181,404 VIIRS detections in September 2020, the count fell from 15,312 clusters at 1 km to 8,365 at 2 km (49,537 at 0.5 km, 3,676 at 5 km). This whole-month comparison was produced after the gridding code was in place ([California report](case_study/REPORT.md#sensitivity-of-cluster-counts-to-the-clustering-radius)). The cell definition has a cost of its own. Two fires in one cell count once, and a front on a cell edge can look unmatched. The cell size changes results less than the cluster radius changes counts. For Suomi-NPP the median monthly errors at 5, 10 and 25 km were 14.6, 13.2 and 11.4 % in California and 16.6, 14.7 and 14.6 % in Portugal ([California](case_study/REPORT.md#sensitivity-to-the-grid-cell-size), [Portugal](case_study_portugal/REPORT.md#sensitivity-to-the-grid-cell-size)). The 10 km default is a working resolution. Who chose it is not recorded.
 
-## When the simpler model wins
+## 2. What a missing Aqua match means
 
-For California Suomi-NPP, a constant conversion ratio nearly matched Aqua's total over the held-out months. The table shows why that alone would be a poor basis for choosing a calendar model.
+**Behaviour.** A platform is "covered" on a date when the download manifest lists that date as requested and returned for one of its sources. Without manifest intervals, coverage is inferred from the span between the first and last detection, and the provenance says so. Known gaps are removed, and one day is trimmed at each coverage edge ([`platform_coverage`](../engine/matching.py)). Cross-sensor pairs are built only on dates when both platforms are covered, and they keep cells seen by either ([`build_pairs`](../engine/matching.py)).
 
-| Count method | Total bias | Median absolute monthly error |
+This gives a missing match two different meanings:
+
+- **On a covered date**, a VIIRS-active cell without an Aqua detection means Aqua did not report that cell. It enters calibration as an Aqua "not detected" label.
+- **On an uncovered date** there is no Aqua observation, so the cell is left out of calibration. In the record the day is missing, never zero, unless a calibrated VIIRS (or Terra) estimate exists. In that case the day's source is stored with it.
+
+Neither case establishes whether a fire was present. Hot-spot files do not record cloud or what the satellite could see.
+
+**Evidence.** For California NOAA-20, matching produced 11,519 cell half-days seen by both, 31,882 seen only by VIIRS and 1,959 only by Aqua, over 81 months ([report](case_study/REPORT.md#cross-sensor-validation-held-out-data)). The VIIRS-only rows are what the detection model learns from. The tests check that days outside coverage are missing rather than zero, that a failed download chunk becomes a gap, and that coverage never extends past the last detection when FIRMS availability is unknown ([test_harmonization.py](../tests/test_harmonization.py), [test_downloader.py](../tests/test_downloader.py)).
+
+## 3. Model selection: held-out error decides, and the simpler method keeps its place
+
+**Behaviour.** For each platform, the candidates are listed simplest first:
+- counts: grid only, constant ratio, detection model, detection model with time of year;
+- FRP: as reported, constant ratio, log-log, ridge.
+
+Each candidate is scored on monthly totals in years it was not fitted on (leave-years-out, 5 folds over 7 years). The selection metric is scaled RMSE, on square-root counts and log FRP. The selector starts with the simplest available candidate and switches to a later one only if its scaled RMSE is more than 2 % lower than the current choice. A forward test (fit 2018–2022, predict 2023–24) is reported alongside ([`harmonizer.py`](../engine/harmonizer.py)).
+
+**Why total bias cannot decide.** For California Suomi-NPP, the constant ratio nearly matches Aqua's total over the held-out months, yet its typical month is far off ([report](case_study/REPORT.md#cross-sensor-validation-held-out-data)):
+
+| Count method | Total bias | Median monthly error | Scaled RMSE |
+|---|---:|---:|---:|
+| Grid only | +210.7 % | 317.5 % | 10.577 |
+| Grid and constant ratio | +0.2 % | 46.5 % | 3.117 |
+| Detection model with time of year (used) | +1.8 % | 13.2 % | 1.619 |
+
+A single ratio is fitted to make the totals agree. Months it overestimates and months it underestimates then cancel in the total, while each month can still be wrong by about half. The selection metric scores every month, so the seasonal model wins. The median monthly error uses months with more than five observed Aqua cells.
+
+**When the simpler method won.** For California Terra, the constant ratio lowered scaled RMSE from 1.972 (grid only) to 1.946, only 1.3 %. That is short of the 2 % threshold, so grid only was kept ([report](case_study/REPORT.md#cross-sensor-validation-held-out-data)). For FRP in Portugal NOAA-20, "as reported" scored 0.884. Every calibration scored worse (constant ratio 1.061, log-log 0.913, ridge 0.915), so no conversion was applied, even though the uncalibrated total is −31.2 % ([report](case_study_portugal/REPORT.md#cross-sensor-validation-held-out-data)). The rule picks the least-bad candidate. It does not make a weak FRP conversion good.
+
+## The switch-off experiment: what it establishes and where it falls short
+
+**Setup.** From 1 January 2023, every Terra and Aqua detection is removed and both are marked as not covered. Each region's calibrations are refitted on that region's 2018-04-01 to 2022-12-31 data only, and the record continues from VIIRS alone (Suomi-NPP and NOAA-20, averaged, never added). The result is compared with what Aqua actually reported in the 24 withheld months. A month counts only if every day has both values ([`modis_switch_off_test`](../engine/pipeline.py)).
+
+| 2023–24, VIIRS-only record vs real Aqua | California | Portugal |
 |---|---:|---:|
-| Grid only | +210.7% | 317.5% |
-| Grid and constant ratio | +0.2% | 46.5% |
-| Detection model with time of year | +1.8% | 13.2% |
+| Raw VIIRS hot spots, total difference | +523.0 % | +628.4 % |
+| **Active cells:** total difference | −6.0 % | +2.9 % |
+| Active cells: median monthly error | 13.4 % | 14.5 % |
+| Active cells: rank correlation | 0.957 | 0.925 |
+| Months inside the stated 90 % band | 96 % (23 of 24) | 92 % |
+| **FRP:** total difference | −37.6 % | −17.1 % |
+| FRP: median monthly error | 48.9 % | 88.4 % |
 
-Errors with opposite signs cancel across months. The seasonal model tracks the monthly pattern better even though its total bias is larger. For these count errors, the median uses months with more than five observed Aqua cells. The selection metric is held-out RMSE on square-root counts. The selector starts with the simplest available candidate and moves to a later one only when its score improves by more than 2% relative to the current choice. In the same region, the grid alone scored 1.972 for Terra and the ratio scored 1.946. That reduction was too small to trigger a switch. See the [selection code](../engine/harmonizer.py) and the [candidate scores](case_study/REPORT.md#cross-sensor-validation-held-out-data).
+Sources: [California](case_study/REPORT.md#modis-switched-off-does-the-record-continue), [Portugal](case_study_portugal/REPORT.md#modis-switched-off-does-the-record-continue).
 
-## What happens when Aqua disappears?
+**What it establishes.** Within each region, a calibration fitted only on earlier years carried the active-cell record through two later years. The total stayed within 6 % of Aqua and the typical month within about 14 %. A plain switch to raw VIIRS counts would have added 523 % and 628 %.
 
-On a covered Aqua day, the record uses Aqua. Without Aqua, each available calibrated VIIRS platform produces an estimate on the Aqua scale. If two platforms each estimate ten active cells, the daily estimate is ten. Adding them would make the calendar jump merely because another satellite was available. Calibrated Terra is the last source in the daily sequence. When no source qualifies, the record keeps the date missing. The synthetic tests exercise both an outage and a covered quiet period. See the [pipeline](../engine/pipeline.py) and [harmonisation tests](../tests/test_harmonization.py).
+**Where it falls short.**
+- It measures agreement with Aqua, not with fire on the ground.
+- It covers two regions and 24 months. Each region used its own calibration, so it says nothing about transferring a calibration between regions. A test of that would freeze the California calibration, apply it to Portugal without refitting, and compare it with Portugal's own fit.
+- FRP does not continue reliably. Its monthly errors are large in both regions. Over the same years Aqua's orbit drifted: its median daytime detection time in California moved from 13:11 in 2022 to 13:43 in 2024, and the median gap to NOAA-20 grew from 24 to 45 minutes. A fixed FRP conversion meets that drift, but the experiment does not isolate the cause ([observing-system check](case_study/REPORT.md#observing-system-check)).
+- NOAA-21 is not yet part of the continuation.
 
-The switch-off experiment removes both MODIS instruments from January 2023 onward and refits using the earlier overlap. Actual Aqua observations in 2023–24 are then available for scoring. Over 24 months, active-cell total bias was −6.0% in California and +2.9% in Portugal. Median absolute monthly errors were 13.4% and 14.5%. The same reconstruction underestimated total fire radiative power by 37.6% and 17.1%. Power is sampled at overpass time, and the California report records the median daytime Aqua–NOAA-20 gap growing from 24 minutes in 2022 to 45 in 2024. That makes a fixed FRP conversion harder to interpret. The experiment does not isolate the cause of the error. [California](case_study/REPORT.md#observing-system-check) · [Portugal](case_study_portugal/REPORT.md)
+## Use of AI
 
-A separate experiment would be needed to test geographic transfer. One option is to freeze the California calibration, apply it in Portugal without refitting, then compare it with Portugal's locally fitted baseline. The current reports answer how each calibration behaves over time within its own region.
-
-## Whiteboard walkthrough
-
-Draw three columns for one cell and half-day: VIIRS pixels, Aqua pixels, and whether each platform had coverage. Start with eight VIIRS pixels and one Aqua pixel. Remove the Aqua pixel with coverage intact, then remove Aqua coverage altogether. Which cases enter calibration, and what is the Aqua label in each? Trace the answer from gridding through matching. Finally, hide Aqua for the last two years and explain which observations the pipeline can use for fitting and which it keeps for scoring.
+ChatGPT wrote the 14 November audit. Claude implemented the redesign in `694a04b` and the later changes and tests; from [`5199d46`](https://github.com/Jeeson-Kurian/pyro-harmonize/commit/5199d46) on, commits record Claude as co-author. Codex drafted PR #1's documentation. Claude revised this rationale from an interview with Jeeson Kurian. Claims about Jeeson's role are limited to what he confirmed: he requested the critique and asked for its findings to be addressed.

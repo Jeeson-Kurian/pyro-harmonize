@@ -149,7 +149,7 @@ More in [docs/METHODS.md](docs/METHODS.md), section 11.
 
 ## Use of AI
 
-Claude assisted with implementation, tests and documentation. The [MODIS switch-off commit](https://github.com/Jeeson-Kurian/pyro-harmonize/commit/5199d46f412a7fdd7e0265c9c110eff9b6601d20) records Claude as a co-author. Codex assisted with the design rationale and documentation revisions. The dashboard renders charts from the selected dataset. The published regional reports use NASA FIRMS observations, and the simulator supplies labelled synthetic data for tests and demo mode.
+Claude assisted with implementation, tests and documentation. The [MODIS switch-off commit](https://github.com/Jeeson-Kurian/pyro-harmonize/commit/5199d46f412a7fdd7e0265c9c110eff9b6601d20) records Claude as a co-author. Codex assisted with the design rationale and documentation revisions. ChatGPT wrote the 14 November review that prompted the redesign; its technical findings are ChatGPT's. The dashboard renders charts from the selected dataset. The published regional reports use NASA FIRMS observations, and the simulator supplies labelled synthetic data for tests and demo mode.
 
 ## Project layout
 
