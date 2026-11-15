@@ -46,3 +46,4 @@ Thumbs.db
 data/firms/_chunks/
 data/regions/*/_chunks/
 .pytest_cache/
+_chunks/
