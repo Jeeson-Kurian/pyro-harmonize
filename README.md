@@ -16,7 +16,7 @@ NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS H
 | | |
 |---|---|
 | Real-data pipeline (download, quality control, harmonisation, validation, web app) | **Implemented and covered by automated tests** |
-| Real NASA FIRMS case study | **Done for northern California, April 2018 to December 2024** (908,032 detections after quality control). On months the model never saw, harmonisation cuts the difference between VIIRS and Aqua MODIS from about +780 % (raw hot spots) to under 2 %. Details: [Real-data result](#real-data-result) and [docs/case_study/REPORT.md](docs/case_study/REPORT.md). |
+| Real NASA FIRMS case study | **Done for two regions, April 2018 to December 2024:** northern California (908,032 detections after quality control) and Portugal (93,811). On months the model never saw, harmonisation cuts the difference between VIIRS and Aqua MODIS from about +500 % to +780 % (raw hot spots) to under 2 % in both regions. Details: [Real-data result](#real-data-result), [docs/case_study/REPORT.md](docs/case_study/REPORT.md) and [docs/case_study_portugal/REPORT.md](docs/case_study_portugal/REPORT.md). |
 | What it does not show yet | That the method works in every fire regime. Each validated region is listed under [Real-data result](#real-data-result), fitted and tested on its own data. |
 
 ## The problem
@@ -171,7 +171,7 @@ We acknowledge the use of data from NASA's Fire Information for Resource Managem
 
 ## Limits
 
-- A result for one area does not validate the method elsewhere. Run the case study for each area you care about.
+- Two regions are validated (northern California and Portugal). That does not prove the method works in every fire regime; run the case study for each area you care about.
 - Hot-spot files do not say where the satellite looked and saw nothing, or where cloud hid the ground.
 - FRP values are instantaneous power at overpass time. They are not energy. Harmonised FRP is less certain than harmonised cell counts: the Aqua/VIIRS FRP ratio for the same cells changes from year to year (see the observing-system check in the report).
 - Terra and Aqua have drifted from their original orbits; the report measures this from the data (Aqua's daytime overpass moved from about 13:10 to 13:43 local solar time by 2024).
