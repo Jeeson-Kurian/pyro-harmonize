@@ -71,6 +71,22 @@ Sources: [California](case_study/REPORT.md#modis-switched-off-does-the-record-co
 - FRP does not continue reliably. Its monthly errors are large in both regions. Over the same years Aqua's orbit drifted: its median daytime detection time in California moved from 13:11 in 2022 to 13:43 in 2024, and the median gap to NOAA-20 grew from 24 to 45 minutes. A fixed FRP conversion meets that drift, but the experiment does not isolate the cause ([observing-system check](case_study/REPORT.md#observing-system-check)).
 - NOAA-21 is not yet part of the continuation.
 
+## One detection, end to end
+
+Take one NOAA-20 detection in the Dixie Fire area on the afternoon of 5 August 2021.
+
+1. **Gridding.** Its position puts it in a 10 km cell. Its UTC time and longitude put it in the 06:00–18:00 local solar slot. Alone it is one active cell-half-day with one pixel. With seven more NOAA-20 pixels in the same cell that afternoon, it is still one active cell-half-day, now with eight pixels. The row also keeps the overpass count, mean time, mean scan width, and FRP divided by the number of overpasses.
+2. **Matching** (only on dates both platforms are covered):
+
+   | Aqua side | What enters calibration |
+   |---|---|
+   | Aqua reported cell C that afternoon | Label 1. With positive FRP from both, the pair also trains the FRP regression. |
+   | Aqua covered that date but reported nothing in cell C | Label 0, for "Aqua reports the cell". It says nothing about fire, cloud or bare ground. |
+   | Aqua not covered that date | No label: not a calibration row. |
+
+3. **Calibration.** The model learns p, the probability that Aqua also reports a NOAA-20-active cell, from pixel count, FRP, day/night and time of year. The row contributes (1 + ρ_day)·p Aqua-equivalent cells, and (1 + ρ_frp)·p·g(x) Aqua-equivalent FRP. In 2021 Aqua is covered, so the record uses Aqua's own count and the NOAA-20 estimate is not added to it.
+4. **Cut-off test.** Dated 5 August 2023, the detection cannot enter fitting: Aqua's coverage is switched off from 1 January 2023, and pairs need both platforms. It is converted to Aqua-equivalent cells and averaged with the other VIIRS platform's estimate for that day. No single pixel is scored. The comparison is the month's total against Aqua's withheld total, and a month counts only if every day has both values. For California, August 2023 gave 67.9 continued against 74 observed active cell-half-days ([report data](case_study/report.json)).
+
 ## Use of AI
 
 ChatGPT wrote the 14 November audit. Claude implemented the redesign in `694a04b` and the later changes and tests; from [`5199d46`](https://github.com/Jeeson-Kurian/pyro-harmonize/commit/5199d46) on, commits record Claude as co-author. Codex drafted PR #1's documentation. Claude revised this rationale from an interview with Jeeson Kurian. Claims about Jeeson's role are limited to what he confirmed: he requested the critique and asked for its findings to be addressed.
