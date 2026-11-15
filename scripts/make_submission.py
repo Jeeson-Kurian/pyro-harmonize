@@ -36,6 +36,9 @@ def main(argv=None) -> int:
     parser.add_argument("--end", default="2024-12-31")
     parser.add_argument("--sources", default="MODIS_SP,VIIRS_SNPP_SP,VIIRS_NOAA20_SP")
     parser.add_argument("--chunk-days", type=int, default=5)
+    parser.add_argument("--name", default="", help="short name for an extra region, e.g. portugal; its data go to "
+                        "data/regions/<name>/ and its report to docs/case_study_<name>/")
+    parser.add_argument("--label", default=None, help="area name shown in the report, e.g. 'Portugal'")
     args = parser.parse_args(argv)
 
     try:
@@ -50,7 +53,9 @@ def main(argv=None) -> int:
         print("A MAP_KEY is required. It is free: https://firms.modaps.eosdis.nasa.gov/api/map_key/", file=sys.stderr)
         return 2
 
-    out_dir = os.path.join(ROOT, "data", "firms")
+    name = "".join(ch for ch in args.name.lower() if ch.isalnum() or ch in "-_")
+    out_dir = os.path.join(ROOT, "data", "regions", name) if name else os.path.join(ROOT, "data", "firms")
+    report_dir = os.path.join(ROOT, "docs", f"case_study_{name}" if name else "case_study")
     print("Step 1 of 3: downloading NASA FIRMS data (resumable; this can take 20 to 60 minutes)")
     manifest = download(bbox, start, end, [s.strip() for s in args.sources.split(",") if s.strip()],
                         out_dir, key, args.chunk_days)
@@ -66,11 +71,15 @@ def main(argv=None) -> int:
               "Run the same command again to retry only those.")
 
     print("Step 2 of 3: validation case study")
-    code = run_case_study.main(["--data-dir", out_dir, "--out", os.path.join(ROOT, "docs", "case_study"),
-                                "--update-readme"])
+    case_args = ["--data-dir", out_dir, "--out", report_dir, "--update-readme"]
+    if args.label:
+        case_args += ["--label", args.label]
+    code = run_case_study.main(case_args)
     if code != 0:
         return code
     print("Step 3 of 3: done. Next:")
+    if name:
+        print(f"  set PYRO_DATA_DIR=data\\regions\\{name}   (Windows; on Mac/Linux: export PYRO_DATA_DIR=data/regions/{name})")
     print("  python app.py                      # look at the real-data dashboard")
     print("  git add -A && git commit -m \"Real-data case study\" && git push")
     return 0 if failed == 0 else 1

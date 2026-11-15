@@ -119,3 +119,14 @@ def test_units_and_wording_do_not_claim_energy_or_causes(analysis):
     text = str(analysis.summary["units"]) + str(analysis.summary["seasonality"]["definition"])
     assert "not an energy" in text
     assert "climate" not in str(analysis.summary).lower()
+
+
+def test_short_record_extremes_are_not_automatically_exceptional():
+    # six baseline years; the lowest month is only mildly low -> "below normal", not exceptional
+    data = {2018: 41.0, 2019: 60.0, 2020: 64.0, 2021: 70.0, 2022: 55.0, 2023: 66.0, 2024: 38.0}
+    out = an.monthly_anomalies(monthly_frame(data, month=12))
+    row = out.loc["2024-12"]
+    assert row["percentile"] == 0.0 and row["category"] == "below normal"
+    # a month far outside the spread is exceptional
+    data[2024] = 400.0
+    assert an.monthly_anomalies(monthly_frame(data, month=12)).loc["2024-12", "category"] == "exceptionally high"

@@ -22,14 +22,21 @@ import pandas as pd
 
 MIN_MONTH_COVERAGE = 0.80
 MIN_BASELINE_YEARS = 5
+EXCEPTIONAL_Z = 3.0
 
 
-def _category(percentile: float) -> str:
-    if percentile >= 95:
+def _category(percentile: float, robust_z: float) -> str:
+    """
+    Percentile rank alone is not enough with a short record: with six baseline
+    years the lowest month is always at percentile 0. "Exceptionally" therefore
+    also requires the month to lie at least 3 robust standard deviations from
+    the median.
+    """
+    if percentile >= 95 and robust_z >= EXCEPTIONAL_Z:
         return "exceptionally high"
     if percentile >= 80:
         return "above normal"
-    if percentile <= 5:
+    if percentile <= 5 and robust_z <= -EXCEPTIONAL_Z:
         return "exceptionally low"
     if percentile <= 20:
         return "below normal"
@@ -67,8 +74,10 @@ def monthly_anomalies(monthly: pd.DataFrame, value_column: str = "cells") -> pd.
         cols["anomaly_abs"].append(value - median)
         cols["anomaly_pct"].append(100.0 * (value - median) / median if median > 0 else np.nan)
         cols["percentile"].append(percentile)
-        cols["robust_z"].append((value - median) / (1.4826 * mad) if mad > 0 else np.nan)
-        cols["category"].append(_category(percentile))
+        # robust spread: 1.4826 x median absolute deviation, at least one active cell
+        robust_z = (value - median) / max(1.4826 * mad, 1.0)
+        cols["robust_z"].append(robust_z)
+        cols["category"].append(_category(percentile, robust_z))
     for key, values in cols.items():
         out[key] = values
     return out

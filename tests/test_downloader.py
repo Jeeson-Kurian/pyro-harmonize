@@ -157,6 +157,7 @@ def test_one_command_pipeline_end_to_end_and_readme_block(tmp_path, monkeypatch)
             piece = frame[(days >= first) & (days < first + pd.Timedelta(days=n))]
             return FakeResponse(200, piece.to_csv(index=False))
 
+    monkeypatch.delenv("PYRO_DEMO", raising=False)   # test_api.py forces demo mode for its own tests
     out = tmp_path / "firms"
     manifest = download((-124, 36, -119, 41), date(2018, 4, 1), date(2021, 12, 31), list(world["frames"]),
                         str(out), SECRET, chunk_days=10, pause=0, backoff=0, session=WorldSession(),
@@ -179,3 +180,53 @@ def test_one_command_pipeline_end_to_end_and_readme_block(tmp_path, monkeypatch)
     plain = tmp_path / "plain.md"
     plain.write_text("no markers", encoding="utf-8")
     assert update_readme(str(plain), block) is False and plain.read_text() == "no markers"
+
+
+
+def test_limit_answered_with_http_400_waits_instead_of_failing(tmp_path):
+    session = FakeSession(script={2: FakeResponse(400, "Exceeding allowed transaction limit."),
+                                  3: FakeResponse(400, "Exceeding allowed transaction limit.")})
+    logs = []
+    manifest = download((-124, 36, -119, 41), date(2020, 8, 1), date(2020, 8, 15), ["VIIRS_SNPP_SP"],
+                        str(tmp_path), SECRET, pause=0, backoff=0, limit_wait=0, session=session,
+                        log=logs.append)
+    entry = manifest["sources"]["VIIRS_SNPP_SP"]
+    assert entry["failed_chunks"] == [] and entry["coverage"] == [["2020-08-01", "2020-08-15"]]
+    assert any("transaction limit" in line for line in logs)
+
+
+def test_other_http_400_shows_the_firms_message(tmp_path):
+    session = FakeSession(script={1: FakeResponse(400, "Invalid area coordinates.")})
+    manifest = download((-124, 36, -119, 41), date(2020, 8, 1), date(2020, 8, 5), ["VIIRS_SNPP_SP"],
+                        str(tmp_path), SECRET, pause=0, backoff=0, limit_wait=0, session=session,
+                        log=lambda *_: None)
+    error = manifest["sources"]["VIIRS_SNPP_SP"]["failed_chunks"][0]["error"]
+    assert "Invalid area coordinates" in error and SECRET not in error
+
+
+def test_readme_lists_every_real_case_study_and_skips_synthetic(tmp_path):
+    import json as _json
+    from scripts.run_case_study import readme_block_all
+
+    def summary(label, bbox, synthetic=False):
+        cal = {"status": "calibrated", "reason": "", "selected_count_method": "detection_model",
+               "method_labels": {"detection_model": "Detection model", "gridded_cells": "Grid"},
+               "forward_in_time_test": {"count": {"detection_model": {"available": True, "total_bias_pct": -3.5}}},
+               "cross_validation": {"count": {
+                   "raw_hotspots": {"total_bias_pct": 781.2},
+                   "gridded_cells": {"total_bias_pct": 222.0},
+                   "detection_model": {"total_bias_pct": 1.6, "median_abs_pct_error": 14.1, "months": 81}}}}
+        return {"synthetic": synthetic, "label": label, "area": {"bbox_west_south_east_north": bbox},
+                "period": {"start": "2018-04-01", "end": "2024-12-31"},
+                "platforms": [{"platform": "NOAA20", "label": "NOAA-20 VIIRS", "detections": 10}],
+                "calibrations": {"NOAA20": cal}}
+
+    for folder, s in (("case_study", summary("Northern California", [-124, 36, -119, 41])),
+                      ("case_study_portugal", summary("Portugal", [-9.6, 36.9, -6.1, 42.2])),
+                      ("synthetic_selftest", summary("Simulated", [0, 0, 1, 1], synthetic=True))):
+        (tmp_path / "docs" / folder).mkdir(parents=True)
+        (tmp_path / "docs" / folder / "report.json").write_text(_json.dumps(s), encoding="utf-8")
+    block = readme_block_all(str(tmp_path))
+    assert block.index("Northern California") < block.index("Portugal")
+    assert "docs/case_study_portugal/REPORT.md" in block and "Simulated" not in block
+    assert "Each region was fitted and tested on its own data." in block

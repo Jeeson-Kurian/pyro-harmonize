@@ -125,12 +125,17 @@ E[ Aqua FRP          ]  =  (1 + rho_frp)  * sum over target-active cells of  p(x
   also uses pixel count, night flag and pixel size;
 - `rho`, `rho_frp`: Aqua-active cells (and their FRP) that the target did not
   report, relative to the shared ones, estimated separately for day and night.
+- The time-of-year variant adds the sine and cosine of the day of year to `p(x)`.
+  Which fires MODIS can see depends on the kind of burning, which changes through
+  the year (small agricultural or prescribed burns versus large summer
+  wildfires). It is one more candidate and is used only where it wins the
+  held-out test. The FRP candidates use the detection model without time of year.
 
 Candidates, from simplest to most complex:
 
 | Quantity | Candidates |
 |---|---|
-| Active cells | common grid only; grid + one constant ratio; grid + detection model |
+| Active cells | common grid only; grid + one constant ratio; grid + detection model; grid + detection model with time of year |
 | FRP | as reported; one constant ratio; detection model x log-log fit; detection model x ridge |
 
 Raw hot-spot counts are scored as well, as the "do nothing" reference.
@@ -188,7 +193,10 @@ it is not a formal confidence interval.
 - **Monthly anomaly.** A month is compared with the same calendar month in the
   other years (leave-one-out): median, quartiles, percentile rank, robust z.
   It requires 80 % coverage of the month and at least five baseline years;
-  otherwise the answer is "not enough data".
+  otherwise the answer is "not enough data". "Exceptionally" high or low also
+  requires a robust z-score of at least 3 (spread = 1.4826 x median absolute
+  deviation, at least one cell), because with a short record the highest or
+  lowest month always has an extreme percentile.
 - **Critical periods.** Weekly medians and upper quartiles across years; weeks
   reaching half of the peak week's median; the shortest stretch that holds 80 %
   of typical yearly activity.
@@ -208,7 +216,9 @@ used for the harmonised record.
   differ between biomes, fire sizes and view angles. Every area needs its own run.
 - **Observation opportunity is only partly known** (section 4).
 - **Orbit drift.** Terra and Aqua have been drifting from their original orbits
-  in recent years, which shifts their local observation time. A calibration fitted
+  in recent years, which shifts their local observation time. The case-study
+  report measures this from the data (median local solar time of daytime
+  detections per platform and year). A calibration fitted
   on the whole overlap averages over this. The analysed period can be restricted
   with `--start` and `--end` to check how much the result depends on it.
 - **FRP.** VIIRS 375 m FRP is retrieved with the help of 750 m data and MODIS FRP

@@ -34,7 +34,8 @@ def test_analysis_is_valid_json_without_nan(client):
     assert body["synthetic"] is True
     assert body["notes"][0].startswith("SYNTHETIC DATA")
     assert len(body["calendar"]["harmonized_cells"][0]) == 366
-    assert body["headline_validation"]["method"] in ("gridded_cells", "ratio_scaled", "detection_model")
+    assert body["headline_validation"]["method"] in ("gridded_cells", "ratio_scaled", "detection_model",
+                                                     "detection_model_seasonal")
 
 
 def test_area_and_period_selection(client):

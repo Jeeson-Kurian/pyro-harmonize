@@ -43,13 +43,14 @@ from sklearn.preprocessing import StandardScaler
 
 from .matching import pair_summary
 
-COUNT_METHODS = ["gridded_cells", "ratio_scaled", "detection_model"]   # simplest first
+COUNT_METHODS = ["gridded_cells", "ratio_scaled", "detection_model", "detection_model_seasonal"]  # simplest first
 FRP_METHODS = ["unscaled", "ratio_scaled", "loglinear", "ridge"]       # simplest first
 METHOD_LABELS = {
     "raw_hotspots": "Raw hot-spot counts (no harmonisation)",
     "gridded_cells": "Common grid only (no calibration)",
     "ratio_scaled": "Common grid + one constant ratio",
     "detection_model": "Common grid + detection-probability model",
+    "detection_model_seasonal": "Common grid + detection model with time of year",
     "unscaled": "Target FRP as reported (no calibration)",
     "loglinear": "Detection model x log-log FRP regression",
     "ridge": "Detection model x ridge FRP regression",
@@ -68,6 +69,18 @@ def _count_features(rows: pd.DataFrame, frp_fill: float) -> np.ndarray:
     frp = rows["t_frp"].fillna(frp_fill).clip(lower=1e-3).values
     return np.column_stack([np.log10(frp), np.log10(np.maximum(rows["t_npix"].values, 1)),
                             (rows["slot"].values == "night").astype(float)])
+
+
+def _seasonal_features(rows: pd.DataFrame, frp_fill: float) -> np.ndarray:
+    """
+    Detection features plus the time of year (sine and cosine of the day of year).
+    Which fires MODIS can see depends on the kind of burning, and the kind of burning
+    changes through the year (small agricultural and prescribed burns versus large
+    summer wildfires). Two extra parameters; kept only if it wins on held-out years.
+    """
+    doy = pd.DatetimeIndex(rows["local_date"]).dayofyear.values
+    angle = 2.0 * np.pi * doy / 365.25
+    return np.column_stack([_count_features(rows, frp_fill), np.sin(angle), np.cos(angle)])
 
 
 def _frp_features(rows: pd.DataFrame, frp_fill: float, scan_fill: float) -> np.ndarray:
@@ -115,11 +128,15 @@ def fit_methods(train: pd.DataFrame) -> Dict[str, Any]:
     # detection probability
     y = t_rows["r_active"].values.astype(int)
     fit["detect"] = None
+    fit["detect_seasonal"] = None
     fit["base_rate"] = float(y.mean()) if len(y) else 0.0
     if len(y) >= 50 and 0 < y.sum() < len(y):
         model = make_pipeline(StandardScaler(), LogisticRegression(C=10.0, max_iter=1000))
         model.fit(_count_features(t_rows, fit["frp_fill"]), y)
         fit["detect"] = model
+        seasonal = make_pipeline(StandardScaler(), LogisticRegression(C=10.0, max_iter=1000))
+        seasonal.fit(_seasonal_features(t_rows, fit["frp_fill"]), y)
+        fit["detect_seasonal"] = seasonal
 
     # FRP given both active
     pairs = train[both & train["t_frp"].notna() & train["r_frp"].notna()
@@ -142,7 +159,7 @@ def fit_methods(train: pd.DataFrame) -> Dict[str, Any]:
 def predict_rows(fit: Dict[str, Any], rows: pd.DataFrame) -> pd.DataFrame:
     """
     Reference-equivalent contribution of each target-active (cell, half-day),
-    under every candidate. rows needs t_npix, t_frp, t_scan, slot.
+    under every candidate. rows needs t_npix, t_frp, t_scan, slot and local_date.
     """
     out = pd.DataFrame(index=rows.index)
     n = len(rows)
@@ -158,6 +175,11 @@ def predict_rows(fit: Dict[str, Any], rows: pd.DataFrame) -> pd.DataFrame:
     out["c_gridded_cells"] = 1.0
     out["c_ratio_scaled"] = fit["k_cells"]
     out["c_detection_model"] = (1.0 + rho_c) * p
+    if fit.get("detect_seasonal") is not None and n:
+        p_seasonal = fit["detect_seasonal"].predict_proba(_seasonal_features(rows, fit["frp_fill"]))[:, 1]
+        out["c_detection_model_seasonal"] = (1.0 + rho_c) * p_seasonal
+    else:
+        out["c_detection_model_seasonal"] = (1.0 + rho_c) * p
     out["f_unscaled"] = t_frp
     out["f_ratio_scaled"] = fit["k_frp"] * t_frp
     if fit["frp_ols"] is not None and n:
@@ -348,6 +370,7 @@ class TargetCalibration:
             "t_frp": target_cells["frp_mw"].values,
             "t_scan": target_cells["scan_km"].values,
             "slot": target_cells["slot"].values,
+            "local_date": target_cells["local_date"].values,
         }, index=target_cells.index)
         pred = predict_rows(self.fit, rows)
         out = pd.DataFrame(index=target_cells.index)

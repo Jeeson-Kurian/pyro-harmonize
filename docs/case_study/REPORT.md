@@ -1,4 +1,4 @@
-# PyroHarmonize validation report
+# PyroHarmonize validation report: Northern California, USA
 
 Data: NASA FIRMS active-fire detections (see the table of platforms below).
 
@@ -39,6 +39,7 @@ Active fire cells per month:
 | Common grid only (no calibration) **(used)** | +4.2 % | 26.3 % | 0.873 | 1.972 | +2.4 % |
 | Common grid + one constant ratio | +0.4 % | 24.0 % | 0.874 | 1.946 | -2.1 % |
 | Common grid + detection-probability model | +2.5 % | 30.4 % | 0.855 | 2.706 | -21.1 % |
+| Common grid + detection model with time of year | +2.2 % | 28.6 % | 0.873 | 2.845 | -23.1 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
 
@@ -69,7 +70,8 @@ Active fire cells per month:
 | Raw hot-spot counts (no harmonisation) | +764.0 % | 664.2 % | 0.962 | 46.929 | +461.8 % |
 | Common grid only (no calibration) | +210.7 % | 317.5 % | 0.887 | 10.577 | +313.1 % |
 | Common grid + one constant ratio | +0.2 % | 46.5 % | 0.874 | 3.117 | +41.8 % |
-| Common grid + detection-probability model **(used)** | +1.8 % | 18.5 % | 0.955 | 1.748 | -9.0 % |
+| Common grid + detection-probability model | +1.8 % | 18.5 % | 0.955 | 1.748 | -9.0 % |
+| Common grid + detection model with time of year **(used)** | +1.8 % | 13.2 % | 0.961 | 1.619 | -8.5 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
 
@@ -84,7 +86,7 @@ Forward test: fitted on 2018 to 2022, tested on 2023 to 2024.
 
 FRP log-log fit, all pairs: slope 0.879, R2 0.736 (n = 11,273). Pairs within 15 min only: slope 0.923, R2 0.793 (n = 4,043).
 
-Empirical 90 % band for monthly cells (square-root scale, from 81 held-out months): -1.50 to +2.57.
+Empirical 90 % band for monthly cells (square-root scale, from 81 held-out months): -1.75 to +1.68.
 
 ### NOAA-20 VIIRS converted to the Aqua MODIS scale
 
@@ -100,7 +102,8 @@ Active fire cells per month:
 | Raw hot-spot counts (no harmonisation) | +781.2 % | 617.2 % | 0.959 | 47.533 | +584.2 % |
 | Common grid only (no calibration) | +222.0 % | 335.3 % | 0.924 | 10.956 | +339.9 % |
 | Common grid + one constant ratio | +0.3 % | 47.3 % | 0.915 | 3.097 | +46.8 % |
-| Common grid + detection-probability model **(used)** | +1.6 % | 17.8 % | 0.960 | 1.571 | -3.5 % |
+| Common grid + detection-probability model | +1.6 % | 17.8 % | 0.960 | 1.571 | -3.5 % |
+| Common grid + detection model with time of year **(used)** | +1.6 % | 14.1 % | 0.975 | 1.406 | -3.5 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
 
@@ -115,7 +118,7 @@ Forward test: fitted on 2018 to 2022, tested on 2023 to 2024.
 
 FRP log-log fit, all pairs: slope 0.884, R2 0.737 (n = 11,515). Pairs within 15 min only: slope 0.929, R2 0.796 (n = 4,031).
 
-Empirical 90 % band for monthly cells (square-root scale, from 81 held-out months): -1.46 to +2.15.
+Empirical 90 % band for monthly cells (square-root scale, from 81 held-out months): -1.48 to +1.57.
 
 ## Sensitivity to the grid cell size
 
@@ -124,14 +127,14 @@ The whole analysis repeated with other cell sizes. Stable results across sizes m
 | Cell size | Platform | Method used | Held-out total bias | Median monthly error |
 |---:|---|---|---:|---:|
 | 5 km | Terra | Common grid + one constant ratio | +0.6 % | 23.2 % |
-| 5 km | SNPP | Common grid + detection-probability model | +2.4 % | 17.4 % |
-| 5 km | NOAA20 | Common grid + detection-probability model | +2.1 % | 17.6 % |
+| 5 km | SNPP | Common grid + detection model with time of year | +2.3 % | 14.6 % |
+| 5 km | NOAA20 | Common grid + detection model with time of year | +2.1 % | 14.8 % |
 | 10 km | Terra | Common grid only (no calibration) | +4.2 % | 26.3 % |
-| 10 km | SNPP | Common grid + detection-probability model | +1.8 % | 18.5 % |
-| 10 km | NOAA20 | Common grid + detection-probability model | +1.6 % | 17.8 % |
+| 10 km | SNPP | Common grid + detection model with time of year | +1.8 % | 13.2 % |
+| 10 km | NOAA20 | Common grid + detection model with time of year | +1.6 % | 14.1 % |
 | 25 km | Terra | Common grid + one constant ratio | +0.2 % | 22.2 % |
-| 25 km | SNPP | Common grid + detection-probability model | +1.0 % | 15.6 % |
-| 25 km | NOAA20 | Common grid + detection-probability model | +1.0 % | 15.1 % |
+| 25 km | SNPP | Common grid + detection model with time of year | +0.8 % | 11.4 % |
+| 25 km | NOAA20 | Common grid + detection model with time of year | +0.8 % | 12.0 % |
 
 ## Sensitivity of cluster counts to the clustering radius
 
@@ -147,6 +150,43 @@ Busiest month in the selection (2020-09). Cluster counts change with the radius,
 | 2 km | VIIRS | 36,332 | 1,461 | 24.87 |
 | 5 km | MODIS | 4,311 | 428 | 10.07 |
 | 5 km | VIIRS | 36,332 | 659 | 55.13 |
+
+## Observing-system check
+
+Median local solar time of daytime detections, by platform and year. A change over the years means the satellite's orbit drifted, so it observes fires at a different time of day.
+
+| Platform | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Aqua | 13:11 | 13:10 | 13:06 | 13:08 | 13:11 | 13:25 | 13:43 |
+| NOAA20 | 12:58 | 12:56 | 13:00 | 13:01 | 12:57 | 12:56 | 12:56 |
+| SNPP | 13:05 | 12:58 | 13:00 | 13:00 | 12:56 | 12:55 | 12:55 |
+| Terra | 10:59 | 10:57 | 11:00 | 10:58 | 10:47 | 10:35 | 10:17 |
+
+Daytime cells seen by both NOAA20 and Aqua: Aqua FRP divided by NOAA20 FRP, and median minutes between the two overpasses.
+
+| Year | Pairs | Minutes apart | Aqua / VIIRS FRP |
+|---:|---:|---:|---:|
+| 2018 | 1,080 | 27 | 1.93 |
+| 2019 | 666 | 24 | 2.38 |
+| 2020 | 2,372 | 23 | 1.79 |
+| 2021 | 1,890 | 24 | 2.17 |
+| 2022 | 789 | 24 | 1.66 |
+| 2023 | 787 | 27 | 1.47 |
+| 2024 | 639 | 45 | 2.91 |
+
+Daytime cells seen by both SNPP and Aqua: Aqua FRP divided by SNPP FRP, and median minutes between the two overpasses.
+
+| Year | Pairs | Minutes apart | Aqua / VIIRS FRP |
+|---:|---:|---:|---:|
+| 2018 | 1,099 | 22 | 1.90 |
+| 2019 | 647 | 23 | 2.32 |
+| 2020 | 2,355 | 23 | 1.72 |
+| 2021 | 1,828 | 24 | 2.10 |
+| 2022 | 779 | 25 | 1.71 |
+| 2023 | 760 | 26 | 1.35 |
+| 2024 | 583 | 48 | 2.28 |
+
+If the FRP ratio varies a lot between years, a single FRP conversion cannot hold for every year, and harmonised FRP should be read as less certain than harmonised cell counts.
 
 ## Seasonality (observed, no cause assigned)
 

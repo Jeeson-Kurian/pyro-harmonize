@@ -422,7 +422,7 @@ function renderCalendar() {
   const units = {harmonized_cells: 'cells', harmonized_frp_mw: 'MW', modis_hotspots: 'hot spots', viirs_hotspots: 'hot spots'};
   const subs = {
     harmonized_cells: 'One consistent series on the Aqua MODIS scale: ' + A.units.harmonized_cells + '.',
-    harmonized_frp_mw: A.units.harmonized_frp_mw,
+    harmonized_frp_mw: 'Harmonised FRP: ' + A.units.harmonized_frp_mw + ' Less certain than the cell counts: the validation panel shows how well the FRP conversion held on unseen years.',
     modis_hotspots: 'Fire pixels as reported by MODIS (Terra + Aqua). Not comparable with the VIIRS view.',
     viirs_hotspots: 'Fire pixels as reported by VIIRS (all platforms present). Smaller pixels and more satellites mean more hot spots for the same fire.',
     source: 'Which observation the harmonised value of each day is based on.'};
@@ -480,8 +480,9 @@ function renderAnomaly() {
   const box = $('anomaly');
   if (!usable.length) { box.innerHTML = '<div class="warn">Not enough data for a baseline: an anomaly needs the same calendar month in at least five other years, each with 80 % or more coverage.</div>'; return; }
   if (anomalyMonth === null || !usable.some(i => M.period[i] === anomalyMonth)) {
-    const inSeason = usable.filter(k => M.baseline_median[k] > 0);   // most recent month in which burning is normal
-    anomalyMonth = M.period[(inSeason.length ? inSeason : usable).slice(-1)[0]]; }
+    // open on the most unusual month of the record (largest robust z-score)
+    const ranked = usable.filter(k => M.robust_z[k] !== null).sort((a, b) => Math.abs(M.robust_z[b]) - Math.abs(M.robust_z[a]));
+    anomalyMonth = M.period[(ranked.length ? ranked : usable)[0]]; }
   const i = M.period.indexOf(anomalyMonth), cat = M.category[i], mon = M.month[i];
   const derived = M.days_viirs_derived[i] + M.days_terra_derived[i];
   let h = '<div class="controls" style="margin-bottom:10px"><label>Month<select id="selMonth">' + usable.slice().reverse().map(k => '<option' + (M.period[k] === anomalyMonth ? ' selected' : '') + '>' + M.period[k] + '</option>').join('') + '</select></label></div>';
@@ -498,7 +499,7 @@ function renderAnomaly() {
     series: [{name: MONTHS[mon - 1] + ' total', type: 'bar', color: C.s3, y: idx.map(k => ok(k) ? M.cells[k] : null), highlight: idx.indexOf(i)}],
     refs: [{y: M.baseline_median[i], label: 'median of other years'}],
     tooltip: j => { const k = idx[j]; return ok(k) ? [['active cells', fmt(M.cells[k])], ['coverage', fmt(100 * M.coverage[k], 0) + ' %']] : [['', 'coverage too low']]; }});
-  const top = usable.filter(k => M.anomaly_abs[k] !== null).sort((a, b) => M.percentile[b] - M.percentile[a] || M.anomaly_abs[b] - M.anomaly_abs[a]).slice(0, 6);
+  const top = usable.filter(k => M.robust_z[k] !== null).sort((a, b) => Math.abs(M.robust_z[b]) - Math.abs(M.robust_z[a])).slice(0, 6);
   $('anTable').innerHTML = '<table><thead><tr><th>Month</th><th class="num">Cells</th><th class="num">Median</th><th class="num">Anomaly</th><th>Class</th></tr></thead><tbody>' +
     top.map(k => '<tr><td>' + M.period[k] + '</td><td class="num">' + fmt(M.cells[k]) + '</td><td class="num">' + fmt(M.baseline_median[k]) + '</td><td class="num">' + pct(M.anomaly_pct[k]) + '</td><td>' + esc(M.category[k]) + '</td></tr>').join('') + '</tbody></table>';
 }

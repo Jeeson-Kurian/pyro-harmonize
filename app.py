@@ -193,6 +193,16 @@ def index():
         return HTMLResponse(content=handle.read())
 
 
+def _warm_up() -> None:
+    """Run the default analysis once at start-up so the first visitor does not wait."""
+    try:
+        get_analysis(AnalysisConfig())
+    except Exception as exc:  # the page still works; the error shows on first request
+        print(f"Warm-up failed: {exc}")
+
+
 if __name__ == "__main__":
-    uvicorn.run("app:app", host=os.environ.get("HOST", "127.0.0.1"),
-                port=int(os.environ.get("PORT", "8000")), reload=False)
+    threading.Thread(target=_warm_up, daemon=True).start()
+    # Pass the app object (not "app:app") so the server uses this module, whose
+    # cache the warm-up thread fills.
+    uvicorn.run(app, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")))

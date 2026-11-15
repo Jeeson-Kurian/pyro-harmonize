@@ -49,9 +49,68 @@ def _method_table(scores, forward, labels, selected):
     return "\n".join(lines)
 
 
-def build_report(summary, sensitivity, radius) -> str:
+def observing_system_check(analysis):
+    """
+    Two checks of the observing system itself, from the data:
+    1. median local solar time of daytime detections per platform and year
+       (shows orbit drift of Terra and Aqua);
+    2. per year, for cells seen by both a VIIRS platform and Aqua in daytime:
+       Aqua FRP divided by VIIRS FRP, and the minutes between the two overpasses.
+    """
+    import pandas as pd
+    from engine.matching import build_pairs
+    d = analysis.detections
+    if d.empty:
+        return None
+    day = d[d["slot"] == "day"]
+    years = pd.DatetimeIndex(day["local_date"]).year
+    times = day.groupby([day["platform"], years])["local_hour"].median().unstack()
+    ratios = {}
+    for target in ("NOAA20", "SNPP"):
+        if target not in set(analysis.cells["platform"]) or "Aqua" not in set(analysis.cells["platform"]):
+            continue
+        pairs = build_pairs(analysis.cells, target, "Aqua", analysis.coverage)
+        both = pairs[pairs["t_active"] & pairs["r_active"] & (pairs["slot"] == "day")
+                     & (pairs["t_frp"] > 0) & (pairs["r_frp"] > 0)]
+        if both.empty:
+            continue
+        g = both.groupby("year")
+        ratios[target] = pd.DataFrame({"pairs": g.size(), "minutes_apart": g["dt_min"].median(),
+                                       "aqua_over_viirs_frp": g["r_frp"].sum() / g["t_frp"].sum()})
+    return {"overpass_time": times, "frp_ratio": ratios}
+
+
+def _observing_section(check):
+    if not check:
+        return []
+    def hhmm(h):
+        if h != h:
+            return "n/a"
+        minutes = int(round(h * 60))
+        return f"{minutes // 60:02d}:{minutes % 60:02d}"
+    times = check["overpass_time"]
+    years = list(times.columns)
+    out = ["## Observing-system check", "",
+           "Median local solar time of daytime detections, by platform and year. A change over the "
+           "years means the satellite's orbit drifted, so it observes fires at a different time of day.", "",
+           "| Platform | " + " | ".join(str(y) for y in years) + " |",
+           "|---|" + "---:|" * len(years)]
+    for platform, row in times.iterrows():
+        out.append(f"| {platform} | " + " | ".join(hhmm(row[y]) for y in years) + " |")
+    for target, table in check["frp_ratio"].items():
+        out += ["", f"Daytime cells seen by both {target} and Aqua: Aqua FRP divided by {target} FRP, "
+                    "and median minutes between the two overpasses.", "",
+                "| Year | Pairs | Minutes apart | Aqua / VIIRS FRP |", "|---:|---:|---:|---:|"]
+        for year, r in table.iterrows():
+            out.append(f"| {year} | {int(r.pairs):,} | {r.minutes_apart:.0f} | {r.aqua_over_viirs_frp:.2f} |")
+    out += ["", "If the FRP ratio varies a lot between years, a single FRP conversion cannot hold for every "
+                "year, and harmonised FRP should be read as less certain than harmonised cell counts.", ""]
+    return out
+
+
+def build_report(summary, sensitivity, radius, check=None) -> str:
     s = summary
-    out = [f"# PyroHarmonize validation report", ""]
+    out = ["# PyroHarmonize validation report" + (f": {s['label']}" if s.get("label") else ""), ""]
     if s["synthetic"]:
         out += ["> **SYNTHETIC SELF-TEST. The data in this report are simulated (engine/synthetic.py).**",
                 "> It shows that the software recovers a known cross-sensor relationship. It is not",
@@ -138,6 +197,7 @@ def build_report(summary, sensitivity, radius) -> str:
             out.append(f"| {r['eps_km']:g} km | {r['sensor']} | {r['detections']:,} | {r['clusters']:,} | {r['pixels_per_cluster']} |")
         out.append("")
 
+    out += _observing_section(check)
     season = s["seasonality"]
     out += ["## Seasonality (observed, no cause assigned)", ""]
     core = season["core_season_80pct"]
@@ -164,13 +224,14 @@ README_START = "<!-- CASE_STUDY:START -->"
 README_END = "<!-- CASE_STUDY:END -->"
 
 
-def readme_block(summary) -> str:
-    """Short real-data result for the README, built only from numbers in the report."""
+def readme_block(summary, report_path: str = "docs/case_study/REPORT.md") -> str:
+    """Short real-data result for one region, built only from numbers in the report."""
     s = summary
     bbox = ", ".join(f"{v:g}" for v in s["area"]["bbox_west_south_east_north"])
-    lines = [f"Area (west, south, east, north): {bbox}. Period: {s['period']['start']} to {s['period']['end']}. "
-             f"Data: NASA FIRMS, {sum(p['detections'] for p in s['platforms']):,} detections after quality control. "
-             "Full report: [docs/case_study/REPORT.md](docs/case_study/REPORT.md).", "",
+    label = s.get("label") or f"Area {bbox}"
+    lines = [f"**{label}** (west, south, east, north: {bbox}). Period: {s['period']['start']} to "
+             f"{s['period']['end']}. Data: NASA FIRMS, {sum(p['detections'] for p in s['platforms']):,} "
+             f"detections after quality control. Full report: [{report_path}]({report_path}).", "",
              "| Platform compared with Aqua MODIS (held-out months) | Raw hot spots | Common grid only | "
              "After harmonisation | Median monthly error | Forward-in-time test | Method used |",
              "|---|---:|---:|---:|---:|---:|---|"]
@@ -191,9 +252,28 @@ def readme_block(summary) -> str:
         rows += 1
     if not s["calibrations"]:
         lines.append("| (no second platform could be compared with Aqua MODIS in this selection) | | | | | | |")
-    lines += ["", "Percentages are total differences from what Aqua MODIS reported in months that were not used "
-              "for fitting. This is one area; it does not validate the method elsewhere."]
     return "\n".join(lines)
+
+
+def readme_block_all(root: str) -> str:
+    """README result for every case study in docs/ (docs/case_study and docs/case_study_<name>)."""
+    import glob
+    paths = sorted(glob.glob(os.path.join(root, "docs", "case_study*", "report.json")),
+                   key=lambda p: (os.path.basename(os.path.dirname(p)) != "case_study", p))
+    blocks = []
+    for path in paths:
+        with open(path, "r", encoding="utf-8") as handle:
+            summary = json.load(handle)
+        if summary.get("synthetic"):
+            continue
+        rel = os.path.relpath(os.path.join(os.path.dirname(path), "REPORT.md"), root).replace(os.sep, "/")
+        blocks.append(readme_block(summary, rel))
+    if not blocks:
+        return ""
+    note = ("Percentages are total differences from what Aqua MODIS reported in months that were not used for "
+            "fitting. " + ("Each region was fitted and tested on its own data." if len(blocks) > 1 else
+                           "This is one area; it does not validate the method elsewhere."))
+    return "\n\n".join(blocks) + "\n\n" + note
 
 
 def update_readme(path: str, block: str) -> bool:
@@ -219,6 +299,7 @@ def main(argv=None) -> int:
     parser.add_argument("--cell-km", type=float, default=10.0)
     parser.add_argument("--out", default=os.path.join("docs", "case_study"))
     parser.add_argument("--no-sensitivity", action="store_true", help="skip the 5 / 25 km repeat runs")
+    parser.add_argument("--label", default=None, help="name of the area for the report, e.g. 'Portugal'")
     parser.add_argument("--update-readme", action="store_true",
                         help="write the real-data result into README.md (never done for synthetic data)")
     args = parser.parse_args(argv)
@@ -234,6 +315,8 @@ def main(argv=None) -> int:
     if analysis.summary.get("empty"):
         print(analysis.summary["message"], file=sys.stderr)
         return 1
+    if args.label:
+        analysis.summary["label"] = args.label
 
     sensitivity = []
     if not args.no_sensitivity:
@@ -250,7 +333,8 @@ def main(argv=None) -> int:
     radius = analysis.radius_sensitivity()
 
     os.makedirs(args.out, exist_ok=True)
-    report = build_report(analysis.summary, sensitivity, radius)
+    check = observing_system_check(analysis)
+    report = build_report(analysis.summary, sensitivity, radius, check)
     with open(os.path.join(args.out, "REPORT.md"), "w", encoding="utf-8") as handle:
         handle.write(report)
     slim = {k: v for k, v in analysis.summary.items() if k != "calendar"}
@@ -268,7 +352,7 @@ def main(argv=None) -> int:
         readme = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "README.md")
         if analysis.summary["synthetic"]:
             print("README not changed: synthetic results are never written into the real-data section.")
-        elif update_readme(readme, readme_block(analysis.summary)):
+        elif update_readme(readme, readme_block_all(os.path.dirname(readme))):
             print("README.md updated with the real-data result.")
         else:
             print("README.md has no CASE_STUDY markers; it was not changed.")

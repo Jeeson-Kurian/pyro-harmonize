@@ -15,7 +15,7 @@ NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS H
 |---|---|
 | Real-data pipeline (download, quality control, harmonisation, validation, web app) | **Implemented and covered by automated tests** |
 | Real NASA FIRMS case study | **Done for northern California, April 2018 to December 2024** (908,032 detections after quality control). On months the model never saw, harmonisation cuts the difference between VIIRS and Aqua MODIS from about +780 % (raw hot spots) to under 2 %. Details: [Real-data result](#real-data-result) and [docs/case_study/REPORT.md](docs/case_study/REPORT.md). |
-| What it does not show yet | That the method works equally well in other regions. One area was validated. |
+| What it does not show yet | That the method works in every fire regime. Each validated region is listed under [Real-data result](#real-data-result), fitted and tested on its own data. |
 
 ## The problem
 
@@ -96,18 +96,26 @@ python scripts/make_submission.py
 
 Commit `data/firms/*.csv`, `data/firms/manifest.json` and `docs/case_study/` so that others can reproduce the result.
 
+**More regions.** Each extra region gets its own data folder (`data/regions/<name>/`) and report (`docs/case_study_<name>/`), and the "Real-data result" section below lists every region:
+
+```bash
+python scripts/make_submission.py --name portugal --label "Portugal" --bbox -9.6,36.9,-6.1,42.2
+```
+
+To open that region in the app, set `PYRO_DATA_DIR=data/regions/portugal` before `python app.py`.
+
 Settings: `PYRO_DATA_DIR` (other data folder), `PYRO_DEMO=1` (force the synthetic demo), `HOST`, `PORT`.
 
 ## Real-data result
 
 <!-- CASE_STUDY:START -->
-Area (west, south, east, north): -124, 36, -119, 41. Period: 2018-04-01 to 2024-12-31. Data: NASA FIRMS, 908,032 detections after quality control. Full report: [docs/case_study/REPORT.md](docs/case_study/REPORT.md).
+**Northern California, USA** (west, south, east, north: -124, 36, -119, 41). Period: 2018-04-01 to 2024-12-31. Data: NASA FIRMS, 908,032 detections after quality control. Full report: [docs/case_study/REPORT.md](docs/case_study/REPORT.md).
 
 | Platform compared with Aqua MODIS (held-out months) | Raw hot spots | Common grid only | After harmonisation | Median monthly error | Forward-in-time test | Method used |
 |---|---:|---:|---:|---:|---:|---|
 | Terra MODIS (81 months) | +7.0 % | +4.2 % | +4.2 % | 26.3 % | +2.4 % | Common grid only (no calibration) |
-| Suomi-NPP VIIRS (81 months) | +764.0 % | +210.7 % | +1.8 % | 18.5 % | -9.0 % | Common grid + detection-probability model |
-| NOAA-20 VIIRS (81 months) | +781.2 % | +222.0 % | +1.6 % | 17.8 % | -3.5 % | Common grid + detection-probability model |
+| Suomi-NPP VIIRS (81 months) | +764.0 % | +210.7 % | +1.8 % | 13.2 % | -8.5 % | Common grid + detection model with time of year |
+| NOAA-20 VIIRS (81 months) | +781.2 % | +222.0 % | +1.6 % | 14.1 % | -3.5 % | Common grid + detection model with time of year |
 
 Percentages are total differences from what Aqua MODIS reported in months that were not used for fitting. This is one area; it does not validate the method elsewhere.
 <!-- CASE_STUDY:END -->
@@ -123,7 +131,7 @@ Percentages are total differences from what Aqua MODIS reported in months that w
 | After harmonisation (cross-validation) | 0 % (median monthly error 6 %) |
 | After harmonisation (forward-in-time test) | +3 % |
 
-In a blind test on a second simulated world (`tests/test_harmonization.py`), Aqua was hidden for the last four years and reconstructed from VIIRS: the monthly totals matched the hidden Aqua record within 2 % overall (correlation 0.997), and 94 % of months fell inside the 90 % range.
+In a blind test on a second simulated world (`tests/test_harmonization.py`), Aqua was hidden for the last four years and reconstructed from VIIRS: the monthly totals matched the hidden Aqua record within 2 % overall (correlation 0.997), and 92 % of months fell inside the 90 % range.
 
 **These numbers describe the simulator, not the Earth.** They show that the code does what it says. Real-data numbers come from `docs/case_study/REPORT.md`.
 
@@ -151,7 +159,8 @@ We acknowledge the use of data from NASA's Fire Information for Resource Managem
 
 - A result for one area does not validate the method elsewhere. Run the case study for each area you care about.
 - Hot-spot files do not say where the satellite looked and saw nothing, or where cloud hid the ground.
-- FRP values are instantaneous power at overpass time. They are not energy.
+- FRP values are instantaneous power at overpass time. They are not energy. Harmonised FRP is less certain than harmonised cell counts: the Aqua/VIIRS FRP ratio for the same cells changes from year to year (see the observing-system check in the report).
+- Terra and Aqua have drifted from their original orbits; the report measures this from the data (Aqua's daytime overpass moved from about 13:10 to 13:43 local solar time by 2024).
 - Terra-derived values (before July 2002) cross the diurnal cycle and are the least certain part of the record.
 - Trends are observed changes in a mixed-sensor record. No cause is assigned.
 - Not for operational fire-fighting decisions.

@@ -5,7 +5,7 @@
 > evidence about real satellites or real fires.
 
 - Software version: 2.0.0
-- Area (west, south, east, north): -124.029, 35.965, -118.973, 41.030
+- Area (west, south, east, north): -124.000, 36.000, -119.000, 41.000
 - Period: 2001-01-01 to 2025-12-31 (9,131 days, local solar dates)
 - Grid: 10 km equal-area cells x day/night half-days
 - Reference scale: Aqua MODIS
@@ -41,6 +41,7 @@ Active fire cells per month:
 | Common grid only (no calibration) | -21.3 % | 21.5 % | 0.988 | 1.163 | -20.4 % |
 | Common grid + one constant ratio **(used)** | +0.0 % | 9.8 % | 0.988 | 0.606 | +1.5 % |
 | Common grid + detection-probability model | +0.0 % | 12.3 % | 0.985 | 0.689 | +0.1 % |
+| Common grid + detection model with time of year | +0.0 % | 11.9 % | 0.985 | 0.708 | +0.1 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
 
@@ -72,6 +73,7 @@ Active fire cells per month:
 | Common grid only (no calibration) | +142.6 % | 143.7 % | 0.990 | 4.862 | +149.7 % |
 | Common grid + one constant ratio | -0.0 % | 8.0 % | 0.989 | 0.557 | +4.0 % |
 | Common grid + detection-probability model **(used)** | +0.0 % | 6.4 % | 0.994 | 0.423 | +3.3 % |
+| Common grid + detection model with time of year | +0.0 % | 6.5 % | 0.994 | 0.428 | +3.3 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
 
@@ -103,6 +105,7 @@ Active fire cells per month:
 | Common grid only (no calibration) | +148.4 % | 145.7 % | 0.990 | 5.012 | +150.9 % |
 | Common grid + one constant ratio | +0.0 % | 7.9 % | 0.990 | 0.579 | +1.3 % |
 | Common grid + detection-probability model **(used)** | +0.1 % | 7.3 % | 0.993 | 0.430 | +4.1 % |
+| Common grid + detection model with time of year | +0.1 % | 7.8 % | 0.992 | 0.439 | +4.1 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
 
@@ -149,6 +152,51 @@ Busiest month in the selection (2021-08). Cluster counts change with the radius,
 | 2 km | VIIRS | 2,983 | 1,067 | 2.8 |
 | 5 km | MODIS | 781 | 360 | 2.17 |
 | 5 km | VIIRS | 2,983 | 908 | 3.29 |
+
+## Observing-system check
+
+Median local solar time of daytime detections, by platform and year. A change over the years means the satellite's orbit drifted, so it observes fires at a different time of day.
+
+| Platform | 2001 | 2002 | 2003 | 2004 | 2005 | 2006 | 2007 | 2008 | 2009 | 2010 | 2011 | 2012 | 2013 | 2014 | 2015 | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Aqua | n/a | 13:35 | 13:32 | 13:30 | 13:35 | 13:32 | 13:27 | 13:33 | 13:29 | 13:29 | 13:24 | 13:29 | 13:32 | 13:28 | 13:30 | 13:28 | 13:33 | 13:30 | 13:25 | 13:40 | 13:24 | 13:31 | 13:31 | 13:31 | 13:34 |
+| NOAA20 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 13:27 | 13:32 | 13:34 | 13:23 | 13:32 | 13:32 | 13:34 | 13:32 |
+| SNPP | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 13:28 | 13:31 | 13:34 | 13:30 | 13:29 | 13:32 | 13:28 | 13:30 | 13:28 | 13:24 | 13:27 | 13:33 | 13:32 | 13:25 |
+| Terra | 10:32 | 10:27 | 10:31 | 10:34 | 10:33 | 10:38 | 10:29 | 10:30 | 10:28 | 10:32 | 10:33 | 10:35 | 10:29 | 10:35 | 10:28 | 10:27 | 10:27 | 10:31 | 10:27 | 10:36 | 10:32 | 10:36 | 10:35 | 10:28 | 10:34 |
+
+Daytime cells seen by both NOAA20 and Aqua: Aqua FRP divided by NOAA20 FRP, and median minutes between the two overpasses.
+
+| Year | Pairs | Minutes apart | Aqua / VIIRS FRP |
+|---:|---:|---:|---:|
+| 2018 | 332 | 24 | 1.10 |
+| 2019 | 350 | 23 | 1.05 |
+| 2020 | 386 | 22 | 1.04 |
+| 2021 | 429 | 17 | 1.03 |
+| 2022 | 414 | 21 | 1.02 |
+| 2023 | 395 | 21 | 1.05 |
+| 2024 | 289 | 19 | 1.05 |
+| 2025 | 354 | 20 | 1.02 |
+
+Daytime cells seen by both SNPP and Aqua: Aqua FRP divided by SNPP FRP, and median minutes between the two overpasses.
+
+| Year | Pairs | Minutes apart | Aqua / VIIRS FRP |
+|---:|---:|---:|---:|
+| 2012 | 357 | 23 | 1.02 |
+| 2013 | 458 | 25 | 1.07 |
+| 2014 | 362 | 19 | 1.02 |
+| 2015 | 420 | 24 | 1.01 |
+| 2016 | 235 | 21 | 1.03 |
+| 2017 | 519 | 22 | 0.98 |
+| 2018 | 342 | 21 | 1.06 |
+| 2019 | 336 | 22 | 1.07 |
+| 2020 | 386 | 19 | 1.04 |
+| 2021 | 431 | 21 | 1.04 |
+| 2022 | 410 | 24 | 1.01 |
+| 2023 | 387 | 23 | 1.02 |
+| 2024 | 284 | 25 | 1.09 |
+| 2025 | 343 | 18 | 1.05 |
+
+If the FRP ratio varies a lot between years, a single FRP conversion cannot hold for every year, and harmonised FRP should be read as less certain than harmonised cell counts.
 
 ## Seasonality (observed, no cause assigned)
 
