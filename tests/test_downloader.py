@@ -240,3 +240,17 @@ def test_bbox_with_a_leading_minus_is_accepted_on_the_command_line():
         assert join(["--name", "portugal", "--bbox", "-9.6,36.9,-6.1,42.2"]) == \
             ["--name", "portugal", "--bbox=-9.6,36.9,-6.1,42.2"]
         assert join(["--bbox=-124,36,-119,41"]) == ["--bbox=-124,36,-119,41"]
+
+
+def test_gzip_output_is_loaded_once_and_replaces_the_plain_file(tmp_path):
+    from engine.data_loader import load_firms_directory
+    args = dict(chunk_days=5, pause=0, backoff=0, log=lambda *_: None)
+    download((-124, 36, -119, 41), date(2020, 8, 1), date(2020, 8, 12), ["VIIRS_SNPP_SP"],
+             str(tmp_path), SECRET, session=FakeSession(), **args)
+    assert (tmp_path / "VIIRS_SNPP_SP.csv").exists()
+    download((-124, 36, -119, 41), date(2020, 8, 1), date(2020, 8, 12), ["VIIRS_SNPP_SP"],
+             str(tmp_path), SECRET, session=FakeSession(), compress=True, **args)
+    assert (tmp_path / "VIIRS_SNPP_SP.csv.gz").exists() and not (tmp_path / "VIIRS_SNPP_SP.csv").exists()
+    data, provenance = load_firms_directory(str(tmp_path))
+    assert len(data) == 3 and set(data["source"]) == {"VIIRS_SNPP_SP"}
+    assert [f["file"] for f in provenance["files"]] == ["VIIRS_SNPP_SP.csv.gz"]

@@ -52,6 +52,7 @@ def main(argv=None) -> int:
     parser.add_argument("--chunk-days", type=int, default=5)
     parser.add_argument("--name", default="", help="short name for an extra region, e.g. portugal; its data go to "
                         "data/regions/<name>/ and its report to docs/case_study_<name>/")
+    parser.add_argument("--gzip", action="store_true", help="write <SOURCE>.csv.gz (for large regions)")
     parser.add_argument("--label", default=None, help="area name shown in the report, e.g. 'Portugal'")
     args = parser.parse_args(_join_bbox(argv))
 
@@ -72,7 +73,7 @@ def main(argv=None) -> int:
     report_dir = os.path.join(ROOT, "docs", f"case_study_{name}" if name else "case_study")
     print("Step 1 of 3: downloading NASA FIRMS data (resumable; this can take 20 to 60 minutes)")
     manifest = download(bbox, start, end, [s.strip() for s in args.sources.split(",") if s.strip()],
-                        out_dir, key, args.chunk_days)
+                        out_dir, key, args.chunk_days, compress=args.gzip)
     rows = sum(v["rows"] for v in manifest["sources"].values())
     failed = sum(len(v["failed_chunks"]) for v in manifest["sources"].values())
     if rows == 0:

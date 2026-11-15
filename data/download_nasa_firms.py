@@ -166,7 +166,7 @@ def data_availability(session, key: str, source: str, retries: int, backoff: flo
 def download(bbox: Tuple[float, float, float, float], start: date, end: date,
              sources: List[str], out_dir: str, key: str, chunk_days: int = 5,
              retries: int = 4, backoff: float = 2.0, pause: float = 0.25,
-             limit_wait: float = 60.0, session=None, log=print) -> Dict:
+             limit_wait: float = 60.0, session=None, log=print, compress: bool = False) -> Dict:
     west, south, east, north = bbox
     if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
         raise ValueError("bbox must be west,south,east,north inside -180,-90,180,90")
@@ -223,7 +223,12 @@ def download(bbox: Tuple[float, float, float, float], start: date, end: date,
         frames = [f for f in frames if len(f)]
         table = pd.concat(frames, ignore_index=True).drop_duplicates() if frames else pd.DataFrame()
         if len(table):
-            table.to_csv(os.path.join(out_dir, f"{source}.csv"), index=False)
+            # .csv.gz keeps large regions under GitHub's 100 MB file limit; the loader
+            # reads both. Remove the other variant so a source is never loaded twice.
+            name, other = (f"{source}.csv.gz", f"{source}.csv") if compress else (f"{source}.csv", f"{source}.csv.gz")
+            table.to_csv(os.path.join(out_dir, name), index=False)
+            if os.path.exists(os.path.join(out_dir, other)):
+                os.remove(os.path.join(out_dir, other))
             entry["rows"] = int(len(table))
         if available is None:
             # Without the availability table an empty answer for dates FIRMS has not
@@ -265,6 +270,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help=f"comma-separated FIRMS sources (default: {','.join(DEFAULT_SOURCES)})")
     parser.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "firms"))
     parser.add_argument("--chunk-days", type=int, default=5, help="days per request, 1-10 (default 5)")
+    parser.add_argument("--gzip", action="store_true", help="write <SOURCE>.csv.gz instead of <SOURCE>.csv")
     args = parser.parse_args(_join_bbox(argv))
 
     key = os.environ.get("FIRMS_MAP_KEY", "").strip()
@@ -281,7 +287,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
     manifest = download(bbox, date.fromisoformat(args.start), date.fromisoformat(args.end),
                         [s.strip() for s in args.sources.split(",") if s.strip()],
-                        args.out, key, args.chunk_days)
+                        args.out, key, args.chunk_days, compress=args.gzip)
     failed = sum(len(v["failed_chunks"]) for v in manifest["sources"].values())
     print(f"Wrote {args.out}/manifest.json. Failed chunks: {failed}."
           + (" Re-run the same command to retry only the failed ones." if failed else ""))

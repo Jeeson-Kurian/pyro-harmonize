@@ -244,10 +244,11 @@ def quality_filter(df: pd.DataFrame, drop_low_confidence: bool = True,
 
 def load_firms_directory(directory: str) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
-    Load every FIRMS CSV in a directory, plus manifest.json if the downloader wrote one.
+    Load every FIRMS CSV in a directory (.csv or gzip-compressed .csv.gz), plus
+    manifest.json if the downloader wrote one.
     Returns (standard table, provenance).
     """
-    files = sorted(glob.glob(os.path.join(directory, "*.csv")))
+    files = sorted(glob.glob(os.path.join(directory, "*.csv")) + glob.glob(os.path.join(directory, "*.csv.gz")))
     if not files:
         raise FileNotFoundError(f"No FIRMS CSV files found in {directory}")
     manifest = None
