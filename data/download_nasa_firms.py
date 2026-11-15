@@ -242,6 +242,20 @@ def download(bbox: Tuple[float, float, float, float], start: date, end: date,
     return manifest
 
 
+def _join_bbox(argv):
+    """Let '--bbox -9.6,36.9,-6.1,42.2' work: argparse reads a value that starts with '-' as an option."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] == "--bbox" and i + 1 < len(argv):
+            out.append("--bbox=" + argv[i + 1])
+            i += 2
+        else:
+            out.append(argv[i])
+            i += 1
+    return out
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Download NASA FIRMS active-fire data for an area and period.")
     parser.add_argument("--bbox", required=True, help="west,south,east,north in degrees, e.g. -124,36,-119,41")
@@ -251,7 +265,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help=f"comma-separated FIRMS sources (default: {','.join(DEFAULT_SOURCES)})")
     parser.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "firms"))
     parser.add_argument("--chunk-days", type=int, default=5, help="days per request, 1-10 (default 5)")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(_join_bbox(argv))
 
     key = os.environ.get("FIRMS_MAP_KEY", "").strip()
     if not key:

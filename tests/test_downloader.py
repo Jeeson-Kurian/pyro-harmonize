@@ -230,3 +230,13 @@ def test_readme_lists_every_real_case_study_and_skips_synthetic(tmp_path):
     assert block.index("Northern California") < block.index("Portugal")
     assert "docs/case_study_portugal/REPORT.md" in block and "Simulated" not in block
     assert "Each region was fitted and tested on its own data." in block
+
+
+def test_bbox_with_a_leading_minus_is_accepted_on_the_command_line():
+    from data.download_nasa_firms import _join_bbox as j1
+    from scripts.make_submission import _join_bbox as j2
+    from scripts.run_case_study import _join_bbox as j3
+    for join in (j1, j2, j3):
+        assert join(["--name", "portugal", "--bbox", "-9.6,36.9,-6.1,42.2"]) == \
+            ["--name", "portugal", "--bbox=-9.6,36.9,-6.1,42.2"]
+        assert join(["--bbox=-124,36,-119,41"]) == ["--bbox=-124,36,-119,41"]

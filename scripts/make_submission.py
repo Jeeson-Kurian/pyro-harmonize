@@ -29,6 +29,20 @@ from data.download_nasa_firms import download          # noqa: E402
 from scripts import run_case_study                      # noqa: E402
 
 
+def _join_bbox(argv):
+    """Let '--bbox -9.6,36.9,-6.1,42.2' work: argparse reads a value that starts with '-' as an option."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] == "--bbox" and i + 1 < len(argv):
+            out.append("--bbox=" + argv[i + 1])
+            i += 2
+        else:
+            out.append(argv[i])
+            i += 1
+    return out
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Download FIRMS data, validate, and fill the README result.")
     parser.add_argument("--bbox", default="-124,36,-119,41", help="west,south,east,north (default: northern California)")
@@ -39,7 +53,7 @@ def main(argv=None) -> int:
     parser.add_argument("--name", default="", help="short name for an extra region, e.g. portugal; its data go to "
                         "data/regions/<name>/ and its report to docs/case_study_<name>/")
     parser.add_argument("--label", default=None, help="area name shown in the report, e.g. 'Portugal'")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(_join_bbox(argv))
 
     try:
         bbox = tuple(float(v) for v in args.bbox.split(","))

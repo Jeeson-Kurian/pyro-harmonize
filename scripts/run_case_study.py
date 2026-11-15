@@ -289,6 +289,20 @@ def update_readme(path: str, block: str) -> bool:
     return True
 
 
+def _join_bbox(argv):
+    """Let '--bbox -9.6,36.9,-6.1,42.2' work: argparse reads a value that starts with '-' as an option."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] == "--bbox" and i + 1 < len(argv):
+            out.append("--bbox=" + argv[i + 1])
+            i += 2
+        else:
+            out.append(argv[i])
+            i += 1
+    return out
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Run the PyroHarmonize case study and write a validation report.")
     parser.add_argument("--data-dir", default=None, help="folder with FIRMS CSV files (default data/firms)")
@@ -302,7 +316,7 @@ def main(argv=None) -> int:
     parser.add_argument("--label", default=None, help="name of the area for the report, e.g. 'Portugal'")
     parser.add_argument("--update-readme", action="store_true",
                         help="write the real-data result into README.md (never done for synthetic data)")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(_join_bbox(argv))
 
     detections, manifest, info = load_dataset(args.data_dir, force_synthetic=args.demo)
     if info["mode"] == "synthetic" and not args.demo:
