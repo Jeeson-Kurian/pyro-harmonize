@@ -31,7 +31,7 @@
 - Test design: leave-years-out, 5 folds over 24 years
 - Matched cell half-days: 5,513 seen by both, 6,656 only by Terra MODIS, 9,951 only by Aqua MODIS, over 191 months
 - Median time between the two overpasses: 179 min; 0 % within 15 min
-- Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
+- Selection rule: try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice
 
 Active fire cells per month:
 
@@ -63,7 +63,7 @@ Empirical 90 % band for monthly cells (square-root scale, from 191 held-out mont
 - Test design: leave-years-out, 5 folds over 14 years
 - Matched cell half-days: 7,239 seen by both, 14,097 only by Suomi-NPP VIIRS, 1,556 only by Aqua MODIS, over 118 months
 - Median time between the two overpasses: 22 min; 37 % within 15 min
-- Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
+- Selection rule: try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice
 
 Active fire cells per month:
 
@@ -95,7 +95,7 @@ Empirical 90 % band for monthly cells (square-root scale, from 118 held-out mont
 - Test design: leave-years-out, 5 folds over 8 years
 - Matched cell half-days: 3,983 seen by both, 7,986 only by NOAA-20 VIIRS, 835 only by Aqua MODIS, over 65 months
 - Median time between the two overpasses: 21 min; 37 % within 15 min
-- Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
+- Selection rule: try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice
 
 Active fire cells per month:
 

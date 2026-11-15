@@ -151,9 +151,9 @@ Raw hot-spot counts are scored as well, as the "do nothing" reference.
 - **Scores.** Total bias, median absolute monthly error, Spearman rank
   correlation, and a scaled RMSE (square-root scale for counts, log scale for FRP,
   so that a few extreme months do not decide everything).
-- **Selection rule.** The simplest candidate whose held-out scaled RMSE is within
-  2 % of the best is used. If a baseline wins, the baseline is used and the app
-  says so.
+- **Selection rule.** Start with the simplest available candidate. For each remaining
+  candidate in order of complexity, switch only if its held-out scaled RMSE is
+  more than 2 % lower than the current choice. Counts and FRP are selected separately.
 - **Minimum evidence.** At least 200 target-active cells, 50 shared cells and 6
   overlap months. Below that the platform is reported as "not calibrated" with
   the reason, and it is left out of the harmonised record. There are no default or

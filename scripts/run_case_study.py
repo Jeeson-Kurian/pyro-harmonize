@@ -309,8 +309,9 @@ def readme_block_all(root: str) -> str:
         blocks.append(readme_block(summary, rel))
     if not blocks:
         return ""
-    note = ("Percentages are total differences from what Aqua MODIS reported in months that were not used for "
-            "fitting. " + ("Each region was fitted and tested on its own data." if len(blocks) > 1 else
+    note = ("The raw column compares target and Aqua hot-spot counts. The grid and harmonised columns compare "
+            "active cells against Aqua. Total bias can cancel errors of opposite signs across months. The median "
+            "monthly error uses absolute errors for months with more than five observed Aqua cells. " + ("Each region was fitted and tested on its own data." if len(blocks) > 1 else
                            "This is one area; it does not validate the method elsewhere."))
     return "\n\n".join(blocks) + "\n\n" + note
 

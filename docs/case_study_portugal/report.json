@@ -169,7 +169,7 @@
    "validation_design": "leave-years-out, 5 folds over 7 years",
    "selected_count_method": "gridded_cells",
    "selected_frp_method": "ratio_scaled",
-   "selection_rule": "simplest method whose held-out scaled RMSE is within 2 % of the best",
+   "selection_rule": "try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice",
    "cross_validation": {
     "count": {
      "raw_hotspots": {
@@ -3214,7 +3214,7 @@
    "validation_design": "leave-years-out, 5 folds over 7 years",
    "selected_count_method": "detection_model_seasonal",
    "selected_frp_method": "loglinear",
-   "selection_rule": "simplest method whose held-out scaled RMSE is within 2 % of the best",
+   "selection_rule": "try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice",
    "cross_validation": {
     "count": {
      "raw_hotspots": {
@@ -6264,7 +6264,7 @@
    "validation_design": "leave-years-out, 5 folds over 7 years",
    "selected_count_method": "detection_model_seasonal",
    "selected_frp_method": "unscaled",
-   "selection_rule": "simplest method whose held-out scaled RMSE is within 2 % of the best",
+   "selection_rule": "try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice",
    "cross_validation": {
     "count": {
      "raw_hotspots": {
