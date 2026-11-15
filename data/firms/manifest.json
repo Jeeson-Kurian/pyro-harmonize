@@ -9,11 +9,13 @@
     41.0
   ],
   "requested": {
-    "start": "2018-04-01",
+    "start": "2000-11-01",
     "end": "2024-12-31"
   },
-  "chunk_days": 5,
-  "retrieved_utc": "2026-11-15T00:16:28Z",
+  "chunk_days": [
+    5
+  ],
+  "retrieved_utc": "2026-11-15T14:52:37Z",
   "sources": {
     "MODIS_SP": {
       "available_in_firms": [
@@ -22,26 +24,12 @@
       ],
       "coverage": [
         [
-          "2018-04-01",
+          "2000-11-01",
           "2024-12-31"
         ]
       ],
       "failed_chunks": [],
-      "rows": 103807
-    },
-    "VIIRS_SNPP_SP": {
-      "available_in_firms": [
-        "2012-01-20",
-        "2026-07-31"
-      ],
-      "coverage": [
-        [
-          "2018-04-01",
-          "2024-12-31"
-        ]
-      ],
-      "failed_chunks": [],
-      "rows": 434309
+      "rows": 194454
     },
     "VIIRS_NOAA20_SP": {
       "available_in_firms": [
@@ -56,7 +44,41 @@
       ],
       "failed_chunks": [],
       "rows": 444427
+    },
+    "VIIRS_SNPP_SP": {
+      "available_in_firms": [
+        "2012-01-20",
+        "2026-07-31"
+      ],
+      "coverage": [
+        [
+          "2018-04-01",
+          "2024-12-31"
+        ]
+      ],
+      "failed_chunks": [],
+      "rows": 434309
     }
   },
-  "platform_gaps": {}
+  "platform_gaps": {},
+  "merged_from": [
+    {
+      "folder": "data/firms",
+      "requested": {
+        "start": "2018-04-01",
+        "end": "2024-12-31"
+      },
+      "retrieved_utc": "2026-11-15T00:16:28Z",
+      "chunk_days": 5
+    },
+    {
+      "folder": "data/extend/california_modis (downloaded separately, merged here)",
+      "requested": {
+        "start": "2000-11-01",
+        "end": "2018-03-31"
+      },
+      "retrieved_utc": "2026-11-15T14:52:37Z",
+      "chunk_days": 5
+    }
+  ]
 }

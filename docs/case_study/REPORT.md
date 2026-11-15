@@ -4,7 +4,7 @@ Data: NASA FIRMS active-fire detections (see the table of platforms below).
 
 - Software version: 2.0.0
 - Area (west, south, east, north): -124.000, 36.000, -119.000, 41.000
-- Period: 2018-04-01 to 2024-12-31 (2,467 days, local solar dates)
+- Period: 2000-11-01 to 2024-12-31 (8,827 days, local solar dates)
 - Grid: 10 km equal-area cells x day/night half-days
 - Reference scale: Aqua MODIS
 - Coverage basis: download manifest
@@ -13,53 +13,53 @@ Data: NASA FIRMS active-fire detections (see the table of platforms below).
 
 | Platform | Orbit | Detections used | Coverage | Days covered | Days with detections | Processing |
 |---|---|---:|---|---:|---:|---|
-| Terra MODIS | morning | 49,762 | 2018-04-01 to 2024-12-31 | 2,467 | 1,714 | SP 49,762 |
-| Aqua MODIS | afternoon | 46,514 | 2018-04-01 to 2024-12-31 | 2,467 | 1,654 | SP 46,514 |
-| Suomi-NPP VIIRS | afternoon | 401,886 | 2018-04-01 to 2024-12-31 | 2,467 | 2,332 | SP 401,886 |
-| NOAA-20 VIIRS | afternoon | 409,870 | 2018-04-01 to 2024-12-31 | 2,467 | 2,354 | SP 409,870 |
+| Terra MODIS | morning | 91,771 | 2000-11-01 to 2024-12-31 | 8,827 | 5,570 | SP 91,771 |
+| Aqua MODIS | afternoon | 87,661 | 2002-07-03 to 2024-12-31 | 8,218 | 5,092 | SP 87,661 |
+| Suomi-NPP VIIRS | afternoon | 401,886 | 2018-04-02 to 2024-12-31 | 2,466 | 2,332 | SP 401,886 |
+| NOAA-20 VIIRS | afternoon | 409,870 | 2018-04-02 to 2024-12-31 | 2,466 | 2,354 | SP 409,870 |
 
 ## Quality control
 
-982,543 rows read, 908,032 used. Removed: 43,856 low-confidence, 30,655 non-vegetation hot spots, 0 duplicates, 0 without valid position or time, 0 from an unidentified platform. 0 rows had no `type` field and could not be screened for static sources.
+1,073,190 rows read, 991,188 used. Removed: 49,092 low-confidence, 32,910 non-vegetation hot spots, 0 duplicates, 0 without valid position or time, 0 from an unidentified platform. 0 rows had no `type` field and could not be screened for static sources.
 
 ## Cross-sensor validation (held-out data)
 
 ### Terra MODIS converted to the Aqua MODIS scale
 
-- Test design: leave-years-out, 5 folds over 7 years
-- Matched cell half-days: 6,898 seen by both, 7,146 only by Terra MODIS, 6,580 only by Aqua MODIS, over 81 months
-- Median time between the two overpasses: 190 min; 0 % within 15 min
+- Test design: leave-years-out, 5 folds over 23 years
+- Matched cell half-days: 13,465 seen by both, 18,077 only by Terra MODIS, 18,373 only by Aqua MODIS, over 270 months
+- Median time between the two overpasses: 155 min; 0 % within 15 min
 - Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
 
 Active fire cells per month:
 
 | Method | Total bias | Median monthly error | Rank corr. | Scaled RMSE | Forward-test bias |
 |---|---:|---:|---:|---:|---:|
-| Raw hot-spot counts (no harmonisation) | +7.0 % | 26.1 % | 0.915 | 3.230 | +3.2 % |
-| Common grid only (no calibration) **(used)** | +4.2 % | 26.3 % | 0.873 | 1.972 | +2.4 % |
-| Common grid + one constant ratio | +0.4 % | 24.0 % | 0.874 | 1.946 | -2.1 % |
-| Common grid + detection-probability model | +2.5 % | 30.4 % | 0.855 | 2.706 | -21.1 % |
-| Common grid + detection model with time of year | +2.2 % | 28.6 % | 0.873 | 2.845 | -23.1 % |
+| Raw hot-spot counts (no harmonisation) | +1.1 % | 22.2 % | 0.922 | 2.330 | +7.8 % |
+| Common grid only (no calibration) **(used)** | -0.9 % | 20.3 % | 0.900 | 1.544 | +4.9 % |
+| Common grid + one constant ratio | +0.0 % | 20.4 % | 0.900 | 1.548 | +9.6 % |
+| Common grid + detection-probability model | +0.3 % | 32.9 % | 0.867 | 2.232 | +23.1 % |
+| Common grid + detection model with time of year | -0.1 % | 35.5 % | 0.858 | 2.436 | +22.6 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
 
 | Method | Total bias | Median monthly error | Rank corr. | Scaled RMSE | Forward-test bias |
 |---|---:|---:|---:|---:|---:|
-| Target FRP as reported (no calibration) | -15.3 % | 31.9 % | 0.927 | 0.566 | -25.1 % |
-| Common grid + one constant ratio **(used)** | +2.9 % | 28.5 % | 0.929 | 0.523 | -12.6 % |
-| Detection model x log-log FRP regression | +17.8 % | 38.5 % | 0.932 | 0.572 | -0.7 % |
-| Detection model x ridge FRP regression | +18.5 % | 43.2 % | 0.921 | 0.670 | -5.0 % |
+| Target FRP as reported (no calibration) | -19.4 % | 34.5 % | 0.939 | 0.572 | -15.0 % |
+| Common grid + one constant ratio **(used)** | +0.8 % | 27.2 % | 0.939 | 0.494 | +13.7 % |
+| Detection model x log-log FRP regression | +6.3 % | 29.2 % | 0.939 | 0.513 | -2.1 % |
+| Detection model x ridge FRP regression | +6.9 % | 32.0 % | 0.934 | 0.559 | -4.6 % |
 
-Forward test: fitted on 2018 to 2022, tested on 2023 to 2024.
+Forward test: fitted on 2002 to 2018, tested on 2019 to 2024.
 
-FRP log-log fit, all pairs: slope 0.782, R2 0.505 (n = 6,898). Too few pairs within 15 min for a separate fit.
+FRP log-log fit, all pairs: slope 0.77, R2 0.488 (n = 13,465). Too few pairs within 15 min for a separate fit.
 
-Empirical 90 % band for monthly cells (square-root scale, from 81 held-out months): -2.83 to +2.97.
+Empirical 90 % band for monthly cells (square-root scale, from 270 held-out months): -1.93 to +2.81.
 
 ### Suomi-NPP VIIRS converted to the Aqua MODIS scale
 
 - Test design: leave-years-out, 5 folds over 7 years
-- Matched cell half-days: 11,275 seen by both, 30,595 only by Suomi-NPP VIIRS, 2,203 only by Aqua MODIS, over 81 months
+- Matched cell half-days: 11,275 seen by both, 30,588 only by Suomi-NPP VIIRS, 2,203 only by Aqua MODIS, over 81 months
 - Median time between the two overpasses: 23 min; 36 % within 15 min
 - Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
 
@@ -67,10 +67,10 @@ Active fire cells per month:
 
 | Method | Total bias | Median monthly error | Rank corr. | Scaled RMSE | Forward-test bias |
 |---|---:|---:|---:|---:|---:|
-| Raw hot-spot counts (no harmonisation) | +764.0 % | 664.2 % | 0.962 | 46.929 | +461.8 % |
-| Common grid only (no calibration) | +210.7 % | 317.5 % | 0.887 | 10.577 | +313.1 % |
-| Common grid + one constant ratio | +0.2 % | 46.5 % | 0.874 | 3.117 | +41.8 % |
-| Common grid + detection-probability model | +1.8 % | 18.5 % | 0.955 | 1.748 | -9.0 % |
+| Raw hot-spot counts (no harmonisation) | +764.0 % | 664.2 % | 0.962 | 46.928 | +461.8 % |
+| Common grid only (no calibration) | +210.6 % | 317.5 % | 0.887 | 10.575 | +313.1 % |
+| Common grid + one constant ratio | +0.2 % | 46.6 % | 0.873 | 3.116 | +41.9 % |
+| Common grid + detection-probability model | +1.8 % | 18.4 % | 0.955 | 1.748 | -9.0 % |
 | Common grid + detection model with time of year **(used)** | +1.8 % | 13.2 % | 0.961 | 1.619 | -8.5 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
@@ -86,12 +86,12 @@ Forward test: fitted on 2018 to 2022, tested on 2023 to 2024.
 
 FRP log-log fit, all pairs: slope 0.879, R2 0.736 (n = 11,273). Pairs within 15 min only: slope 0.923, R2 0.793 (n = 4,043).
 
-Empirical 90 % band for monthly cells (square-root scale, from 81 held-out months): -1.75 to +1.68.
+Empirical 90 % band for monthly cells (square-root scale, from 81 held-out months): -1.74 to +1.68.
 
 ### NOAA-20 VIIRS converted to the Aqua MODIS scale
 
 - Test design: leave-years-out, 5 folds over 7 years
-- Matched cell half-days: 11,519 seen by both, 31,882 only by NOAA-20 VIIRS, 1,959 only by Aqua MODIS, over 81 months
+- Matched cell half-days: 11,519 seen by both, 31,874 only by NOAA-20 VIIRS, 1,959 only by Aqua MODIS, over 81 months
 - Median time between the two overpasses: 24 min; 35 % within 15 min
 - Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
 
@@ -99,20 +99,20 @@ Active fire cells per month:
 
 | Method | Total bias | Median monthly error | Rank corr. | Scaled RMSE | Forward-test bias |
 |---|---:|---:|---:|---:|---:|
-| Raw hot-spot counts (no harmonisation) | +781.2 % | 617.2 % | 0.959 | 47.533 | +584.2 % |
-| Common grid only (no calibration) | +222.0 % | 335.3 % | 0.924 | 10.956 | +339.9 % |
-| Common grid + one constant ratio | +0.3 % | 47.3 % | 0.915 | 3.097 | +46.8 % |
-| Common grid + detection-probability model | +1.6 % | 17.8 % | 0.960 | 1.571 | -3.5 % |
-| Common grid + detection model with time of year **(used)** | +1.6 % | 14.1 % | 0.975 | 1.406 | -3.5 % |
+| Raw hot-spot counts (no harmonisation) | +781.2 % | 617.2 % | 0.959 | 47.532 | +584.2 % |
+| Common grid only (no calibration) | +222.0 % | 335.3 % | 0.924 | 10.953 | +339.9 % |
+| Common grid + one constant ratio | -0.5 % | 47.4 % | 0.922 | 3.043 | +46.8 % |
+| Common grid + detection-probability model | +1.6 % | 17.8 % | 0.959 | 1.571 | -3.5 % |
+| Common grid + detection model with time of year **(used)** | +1.5 % | 14.1 % | 0.976 | 1.398 | -3.5 % |
 
 Fire radiative power (monthly sum of overpass snapshots, MW):
 
 | Method | Total bias | Median monthly error | Rank corr. | Scaled RMSE | Forward-test bias |
 |---|---:|---:|---:|---:|---:|
 | Target FRP as reported (no calibration) | -31.0 % | 38.7 % | 0.967 | 0.520 | -42.0 % |
-| Common grid + one constant ratio | +2.6 % | 73.1 % | 0.964 | 0.718 | -17.1 % |
-| Detection model x log-log FRP regression **(used)** | -5.5 % | 28.3 % | 0.971 | 0.417 | -24.8 % |
-| Detection model x ridge FRP regression | -1.8 % | 38.9 % | 0.969 | 0.494 | -17.3 % |
+| Common grid + one constant ratio | +2.5 % | 73.1 % | 0.964 | 0.717 | -17.1 % |
+| Detection model x log-log FRP regression **(used)** | -5.5 % | 29.6 % | 0.971 | 0.416 | -24.8 % |
+| Detection model x ridge FRP regression | -1.8 % | 37.5 % | 0.969 | 0.492 | -17.3 % |
 
 Forward test: fitted on 2018 to 2022, tested on 2023 to 2024.
 
@@ -126,13 +126,13 @@ The whole analysis repeated with other cell sizes. Stable results across sizes m
 
 | Cell size | Platform | Method used | Held-out total bias | Median monthly error |
 |---:|---|---|---:|---:|
-| 5 km | Terra | Common grid + one constant ratio | +0.6 % | 23.2 % |
+| 5 km | Terra | Common grid only (no calibration) | +0.5 % | 22.2 % |
 | 5 km | SNPP | Common grid + detection model with time of year | +2.3 % | 14.6 % |
 | 5 km | NOAA20 | Common grid + detection model with time of year | +2.1 % | 14.8 % |
-| 10 km | Terra | Common grid only (no calibration) | +4.2 % | 26.3 % |
+| 10 km | Terra | Common grid only (no calibration) | -0.9 % | 20.3 % |
 | 10 km | SNPP | Common grid + detection model with time of year | +1.8 % | 13.2 % |
-| 10 km | NOAA20 | Common grid + detection model with time of year | +1.6 % | 14.1 % |
-| 25 km | Terra | Common grid + one constant ratio | +0.2 % | 22.2 % |
+| 10 km | NOAA20 | Common grid + detection model with time of year | +1.5 % | 14.1 % |
+| 25 km | Terra | Common grid only (no calibration) | -0.1 % | 20.6 % |
 | 25 km | SNPP | Common grid + detection model with time of year | +0.8 % | 11.4 % |
 | 25 km | NOAA20 | Common grid + detection model with time of year | +0.8 % | 12.0 % |
 
@@ -153,7 +153,7 @@ Month with the most detections (2020-09; detections from 2020-09-01 to 2020-09-3
 
 ## MODIS switched off: does the record continue?
 
-Both MODIS instruments (Terra and Aqua) are removed from 2023-01-01. Every calibration is refitted on 2018-04-01 to 2022-12-31 only, and the record is continued from SNPP and NOAA20 VIIRS alone (731 of 731 days). The result is compared with what Aqua MODIS really observed in 24 months, which the test never saw.
+Both MODIS instruments (Terra and Aqua) are removed from 2023-01-01. Every calibration is refitted on 2000-11-01 to 2022-12-31 only, and the record is continued from SNPP and NOAA20 VIIRS alone (731 of 731 days). The result is compared with what Aqua MODIS really observed in 24 months, which the test never saw.
 
 | | Total difference from real Aqua MODIS | Median monthly error | Rank correlation |
 |---|---:|---:|---:|
@@ -167,12 +167,12 @@ Real Aqua monthly values inside the stated 90 % band: 96 % of months.
 
 Median local solar time of daytime detections, by platform and year. A change over the years means the satellite's orbit drifted, so it observes fires at a different time of day.
 
-| Platform | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Aqua | 13:11 | 13:10 | 13:06 | 13:08 | 13:11 | 13:25 | 13:43 |
-| NOAA20 | 12:58 | 12:56 | 13:00 | 13:01 | 12:57 | 12:56 | 12:56 |
-| SNPP | 13:05 | 12:58 | 13:00 | 13:00 | 12:56 | 12:55 | 12:55 |
-| Terra | 10:59 | 10:57 | 11:00 | 10:58 | 10:47 | 10:35 | 10:17 |
+| Platform | 2000 | 2001 | 2002 | 2003 | 2004 | 2005 | 2006 | 2007 | 2008 | 2009 | 2010 | 2011 | 2012 | 2013 | 2014 | 2015 | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Aqua | n/a | n/a | 13:03 | 13:05 | 13:06 | 13:02 | 13:10 | 13:08 | 13:08 | 13:11 | 13:09 | 13:09 | 13:11 | 13:12 | 13:13 | 13:11 | 13:10 | 13:06 | 13:10 | 13:10 | 13:06 | 13:08 | 13:11 | 13:25 | 13:43 |
+| NOAA20 | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 12:58 | 12:56 | 13:00 | 13:01 | 12:57 | 12:56 | 12:56 |
+| SNPP | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | 13:05 | 12:58 | 13:00 | 13:00 | 12:56 | 12:55 | 12:55 |
+| Terra | 11:10 | 11:06 | 10:58 | 10:57 | 10:59 | 10:59 | 10:56 | 11:00 | 10:58 | 10:59 | 11:02 | 10:59 | 10:59 | 10:58 | 11:02 | 11:03 | 10:58 | 10:59 | 10:59 | 10:57 | 11:00 | 10:58 | 10:47 | 10:35 | 10:17 |
 
 Daytime cells seen by both NOAA20 and Aqua: Aqua FRP divided by NOAA20 FRP, and median minutes between the two overpasses.
 
@@ -202,9 +202,9 @@ If the FRP ratio varies a lot between years, a single FRP conversion cannot hold
 
 ## Seasonality (observed, no cause assigned)
 
-- Shortest stretch holding 80 % of typical yearly activity: day 192 to day 40 (214 days)
-- Season length: not reported (6 usable fire years; at least 8 are needed)
-- Yearly total: not reported (6 usable fire years; at least 8 are needed)
+- Shortest stretch holding 80 % of typical yearly activity: day 169 to day 34 (231 days)
+- Season length: -17.50 days per decade, 95 % interval -40.00 to +6.67, p = 0.214, 23 fire years
+- Yearly total: +235.46 harmonised active cells per decade, 95 % interval -36.00 to +669.00, p = 0.127, 23 fire years
 
 ## Notes and limits
 

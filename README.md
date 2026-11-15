@@ -8,7 +8,7 @@
 
 <p align="center">
   <b>Live demo: <a href="https://jeeson-kurian.github.io/pyro-harmonize/">jeeson-kurian.github.io/pyro-harmonize</a></b><br>
-  Opens in any browser, nothing to install. Real NASA FIRMS data, northern California, April 2018 to December 2024.
+  Opens in any browser, nothing to install. Real NASA FIRMS data, northern California, November 2000 to December 2024.
 </p>
 
 <p align="center">
@@ -30,9 +30,9 @@ NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS H
 | | |
 |---|---|
 | Real-data pipeline (download, quality control, harmonisation, validation, web app) | **Implemented and covered by automated tests** |
-| Real NASA FIRMS case study | **Done for two regions, April 2018 to December 2024:** northern California (908,032 detections after quality control) and Portugal (93,811). On months the model never saw, harmonisation cuts the difference between VIIRS and Aqua MODIS from about +500 % to +780 % (raw hot spots) to under 2 % in both regions. Details: [Real-data result](#real-data-result), [docs/case_study/REPORT.md](docs/case_study/REPORT.md) and [docs/case_study_portugal/REPORT.md](docs/case_study_portugal/REPORT.md). |
-| MODIS switched off (simulated end of mission) | **Tested in both regions.** MODIS removed for 2023 and 2024, calibration fitted on the earlier years only, record continued from VIIRS alone: −6.0 % (California) and +2.9 % (Portugal) against what Aqua MODIS really observed, where raw VIIRS hot spots would give +523 % and +628 %. Shown live in the online demo. Details: [Real-data result](#real-data-result). |
-| What it does not show yet | That the method works in every fire regime. Each validated region is listed under [Real-data result](#real-data-result), fitted and tested on its own data. |
+| Real NASA FIRMS case study | **Done for three regions and two fire regimes:** northern California, November 2000 to December 2024 (991,188 detections after quality control); Portugal (93,811) and the tropical savanna of northern Australia (1,872,939), April 2018 to December 2024. On months the model never saw, harmonisation cuts the difference between VIIRS and Aqua MODIS from about +500 % to +780 % (raw hot spots) to under 2 % in every region. Details: [Real-data result](#real-data-result) and the reports for [California](docs/case_study/REPORT.md), [Portugal](docs/case_study_portugal/REPORT.md) and [northern Australia](docs/case_study_australia/REPORT.md). |
+| MODIS switched off (simulated end of mission) | **Tested in all three regions.** MODIS removed for 2023 and 2024, calibration fitted on the earlier years only, record continued from VIIRS alone: −6.0 % (California), +2.9 % (Portugal) and −6.3 % (northern Australia) against what Aqua MODIS really observed, where raw VIIRS hot spots would give +523 %, +628 % and +600 %. Shown live in the online demo. Details: [Real-data result](#real-data-result). |
+| What it does not show yet | That the method works in every fire regime (boreal forest and crop burning are not tested), or that a calibration transfers from one region to another. Each region was fitted and tested on its own data. |
 
 ## The problem
 
@@ -130,15 +130,25 @@ Settings: `PYRO_DATA_DIR` (other data folder), `PYRO_DEMO=1` (force the syntheti
 ## Real-data result
 
 <!-- CASE_STUDY:START -->
-**Northern California, USA** (west, south, east, north: -124, 36, -119, 41). Period: 2018-04-01 to 2024-12-31. Data: NASA FIRMS, 908,032 detections after quality control. Full report: [docs/case_study/REPORT.md](docs/case_study/REPORT.md).
+**Northern California, USA** (west, south, east, north: -124, 36, -119, 41). Period: 2000-11-01 to 2024-12-31. Data: NASA FIRMS, 991,188 detections after quality control. Full report: [docs/case_study/REPORT.md](docs/case_study/REPORT.md).
 
 | Platform compared with Aqua MODIS (held-out months) | Raw hot spots | Common grid only | After harmonisation | Median monthly error | Forward-in-time test | Method used |
 |---|---:|---:|---:|---:|---:|---|
-| Terra MODIS (81 months) | +7.0 % | +4.2 % | +4.2 % | 26.3 % | +2.4 % | Common grid only (no calibration) |
-| Suomi-NPP VIIRS (81 months) | +764.0 % | +210.7 % | +1.8 % | 13.2 % | -8.5 % | Common grid + detection model with time of year |
-| NOAA-20 VIIRS (81 months) | +781.2 % | +222.0 % | +1.6 % | 14.1 % | -3.5 % | Common grid + detection model with time of year |
+| Terra MODIS (270 months) | +1.1 % | -0.9 % | -0.9 % | 20.3 % | +4.9 % | Common grid only (no calibration) |
+| Suomi-NPP VIIRS (81 months) | +764.0 % | +210.6 % | +1.8 % | 13.2 % | -8.5 % | Common grid + detection model with time of year |
+| NOAA-20 VIIRS (81 months) | +781.2 % | +222.0 % | +1.5 % | 14.1 % | -3.5 % | Common grid + detection model with time of year |
 
 MODIS switched off from 2023-01-01 (calibration on earlier years only): raw VIIRS hot spots +523.0 %; record continued from VIIRS -6.0 % against what Aqua MODIS really observed, median monthly error 13.4 %, 96 % of months inside the 90 % band; FRP -37.6 %.
+
+**Northern Australia (tropical savanna)** (west, south, east, north: 131, -16, 135, -12). Period: 2018-04-01 to 2024-12-31. Data: NASA FIRMS, 1,872,939 detections after quality control. Full report: [docs/case_study_australia/REPORT.md](docs/case_study_australia/REPORT.md).
+
+| Platform compared with Aqua MODIS (held-out months) | Raw hot spots | Common grid only | After harmonisation | Median monthly error | Forward-in-time test | Method used |
+|---|---:|---:|---:|---:|---:|---|
+| Terra MODIS (80 months) | -40.5 % | -34.2 % | -0.4 % | 39.1 % | -16.6 % | Common grid + one constant ratio |
+| Suomi-NPP VIIRS (81 months) | +633.9 % | +201.4 % | -0.1 % | 5.8 % | -8.5 % | Common grid + detection model with time of year |
+| NOAA-20 VIIRS (81 months) | +626.9 % | +209.8 % | +0.1 % | 6.2 % | -4.2 % | Common grid + detection model with time of year |
+
+MODIS switched off from 2023-01-01 (calibration on earlier years only): raw VIIRS hot spots +599.7 %; record continued from VIIRS -6.3 % against what Aqua MODIS really observed, median monthly error 7.1 %, 83 % of months inside the 90 % band; FRP +1.4 %.
 
 **Portugal** (west, south, east, north: -9.6, 36.9, -6.1, 42.2). Period: 2018-04-01 to 2024-12-31. Data: NASA FIRMS, 93,811 detections after quality control. Full report: [docs/case_study_portugal/REPORT.md](docs/case_study_portugal/REPORT.md).
 
@@ -190,10 +200,10 @@ We acknowledge the use of data from NASA's Fire Information for Resource Managem
 
 ## Limits
 
-- Two regions are validated (northern California and Portugal). That does not prove the method works in every fire regime; run the case study for each area you care about.
+- Three regions are validated (northern California, Portugal, northern Australia), covering summer-dry wildfires and tropical savanna fires. Each has its own calibration. That does not prove the method works in every fire regime or that a calibration transfers between regions; run the case study for each area you care about.
 - Hot-spot files do not say where the satellite looked and saw nothing, or where cloud hid the ground.
-- FRP values are instantaneous power at overpass time. They are not energy. Harmonised FRP is less certain than harmonised cell counts: the Aqua/VIIRS FRP ratio for the same cells changes from year to year (see the observing-system check in the report).
-- Terra and Aqua have drifted from their original orbits; the report measures this from the data (Aqua's daytime overpass moved from about 13:10 to 13:43 local solar time by 2024).
+- FRP values are instantaneous power at overpass time. They are not energy. Harmonised FRP is less certain than harmonised cell counts. It held in the northern Australian savanna (+1.4 % when MODIS was switched off) but not in California (−37.6 %) or Portugal (−17.1 %), where the Aqua/VIIRS FRP ratio for the same cells changes from year to year (see the observing-system check in each report).
+- Terra and Aqua have drifted from their original orbits; the report measures this from the data. In California, Aqua's median daytime detection time stayed between 13:02 and 13:13 local solar time from 2002 to 2022, then moved to 13:25 in 2023 and 13:43 in 2024.
 - Terra-derived values (before July 2002) cross the diurnal cycle and are the least certain part of the record.
 - Trends are observed changes in a mixed-sensor record. No cause is assigned.
 - Not for operational fire-fighting decisions.
