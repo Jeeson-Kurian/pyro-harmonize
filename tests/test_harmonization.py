@@ -8,7 +8,6 @@ real satellites; that requires the real-data case study (scripts/run_case_study.
 """
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from engine.pipeline import AnalysisConfig, run_analysis

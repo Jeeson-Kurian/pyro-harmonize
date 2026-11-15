@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PyroHarmonize | MODIS and VIIRS burning activity calendar</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -36,6 +37,7 @@
   .banner strong { display: block; margin-bottom: 2px; }
   .banner span { color: var(--text2); font-size: 12.5px; }
   .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+  [hidden] { display: none !important; }
   label { display: grid; gap: 3px; font-size: 11.5px; color: var(--muted); }
   input, select, button { font: inherit; color: var(--text); background: var(--card2); border: 1px solid var(--line);
           border-radius: 7px; padding: 6px 9px; }
@@ -101,6 +103,9 @@
   <section class="card">
     <h2>Area and period</h2>
     <p class="sub">Choose any box inside the loaded data and any date range. Coordinates are in degrees (west and south are negative).</p>
+    <div class="controls" id="regionRow" hidden style="margin-bottom:10px">
+      <label>Region (online demo)<select id="inRegion"></select></label>
+    </div>
     <div class="controls">
       <label>West<input id="inW" type="number" step="0.1"></label>
       <label>South<input id="inS" type="number" step="0.1"></label>
@@ -325,9 +330,11 @@ let META = null, A = null, QUERY = '', calView = 'harmonized_cells', calTarget =
 
 const STATIC = window.PYRO_STATIC === true;   // set by scripts/build_static_site.py
 const REPO = 'https://github.com/Jeeson-Kurian/pyro-harmonize';
+// online demo: pre-computed regions listed in demo-data/regions.json (the first is the default)
+let REGIONS = [{id: 'default', label: '', path: 'demo-data', data: 'data/firms'}], REGION = REGIONS[0];
 function staticUrl(url) {
   for (const name of ['meta', 'analysis', 'clusters', 'sensitivity', 'switch_off'])
-    if (url.startsWith('/api/' + name)) return 'demo-data/' + name + '.json';
+    if (url.startsWith('/api/' + name)) return REGION.path + '/' + name + '.json';
   return url;
 }
 async function getJSON(url) {
@@ -350,18 +357,40 @@ function resetControls() {
   $('inStart').value = META.start || ''; $('inEnd').value = META.end || '';
 }
 
-async function init() {
-  try { META = await getJSON('/api/meta'); } catch (e) { $('content').innerHTML = '<div class="card">Could not reach the server: ' + esc(e.message) + '</div>'; return; }
+async function loadMeta() {
+  try { META = await getJSON('/api/meta'); } catch (e) { $('content').innerHTML = '<div class="card">Could not reach the server: ' + esc(e.message) + '</div>'; return false; }
   if (META.bbox) META.bbox = [Math.floor(META.bbox[0] * 1000) / 1000, Math.floor(META.bbox[1] * 1000) / 1000,
                               Math.ceil(META.bbox[2] * 1000) / 1000, Math.ceil(META.bbox[3] * 1000) / 1000];
   resetControls();
   $('modeChip').innerHTML = META.synthetic
     ? '<span class="chip"><span class="dot" style="background:' + C.warn + '"></span>⚠ Synthetic demo data</span>'
     : '<span class="chip"><span class="dot" style="background:#0ca30c"></span>NASA FIRMS data</span>';
+  return true;
+}
+
+async function init() {
+  if (STATIC) {
+    try {
+      const r = await fetch('demo-data/regions.json');
+      if (r.ok) { const list = await r.json(); if (Array.isArray(list) && list.length) REGIONS = list; }
+    } catch (e) { /* single-region demo: keep the default */ }
+    const wanted = new URLSearchParams(location.search).get('region');
+    REGION = REGIONS.find(x => x.id === wanted) || REGIONS[0];
+    if (REGIONS.length > 1) {
+      $('inRegion').innerHTML = REGIONS.map(x => '<option value="' + esc(x.id) + '">' + esc(x.label) + '</option>').join('');
+      $('inRegion').value = REGION.id; $('regionRow').hidden = false;
+      $('inRegion').onchange = async () => {
+        REGION = REGIONS.find(x => x.id === $('inRegion').value) || REGIONS[0];
+        try { history.replaceState(null, '', '?region=' + encodeURIComponent(REGION.id)); } catch (e) { /* ignore */ }
+        if (await loadMeta()) await load();
+      };
+    }
+  }
+  if (!(await loadMeta())) return;
   if (STATIC) {
     ['inW', 'inS', 'inE', 'inN', 'inStart', 'inEnd', 'btnApply', 'btnReset', 'btnView'].forEach(id => $(id).disabled = true);
     const note = document.createElement('p'); note.className = 'note';
-    note.innerHTML = 'Online demo: the full analysis of the loaded NASA data, computed in advance. To choose any area and period, run the app yourself (<code>python app.py</code>, see <a href="' + REPO + '" target="_blank" rel="noopener">GitHub</a>).';
+    note.innerHTML = 'Online demo: the full analysis of real NASA data for ' + (REGIONS.length > 1 ? 'each validated region (choose it above)' : 'the loaded area') + ', computed in advance. To choose any area and period, run the app yourself (<code>python app.py</code>, see <a href="' + REPO + '" target="_blank" rel="noopener">GitHub</a>).';
     $('selNote').parentNode.insertBefore(note, $('selNote'));
   }
   $('btnApply').onclick = load;
@@ -375,8 +404,8 @@ async function load() {
   const q = selection().toString();
   $('content').innerHTML = '<div class="loading">Analysing…</div>';
   if (STATIC) {
-    $('dlDaily').href = 'demo-data/daily.csv'; $('dlMonthly').href = 'demo-data/monthly.csv';
-    $('dlDet').href = REPO + '/tree/main/data/firms'; $('dlDet').removeAttribute('download'); $('dlDet').textContent = 'Detections (NASA FIRMS files on GitHub)';
+    $('dlDaily').href = REGION.path + '/daily.csv'; $('dlMonthly').href = REGION.path + '/monthly.csv';
+    $('dlDet').href = REPO + '/tree/main/' + REGION.data; $('dlDet').removeAttribute('download'); $('dlDet').textContent = 'Detections (NASA FIRMS files on GitHub)';
   } else
     ['Daily', 'Monthly', 'Det'].forEach((k, i) => $('dl' + k).href = '/api/export/' + ['daily', 'monthly', 'detections'][i] + '.csv' + (q ? '?' + q : ''));
   QUERY = q;

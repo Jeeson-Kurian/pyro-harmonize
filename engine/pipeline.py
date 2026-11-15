@@ -30,7 +30,7 @@ from .data_loader import load_firms_directory, quality_filter, standardize_firms
 from .gridding import add_keys, build_cell_table
 from .harmonizer import METHOD_LABELS, TargetCalibration, _score, monthly_interval
 from .matching import build_pairs, platform_coverage
-from .schema import FIRMS_SOURCES, PLATFORM_LABELS, PLATFORMS, REFERENCE_PLATFORM
+from .schema import PLATFORM_LABELS, PLATFORMS, REFERENCE_PLATFORM
 from .spatial_cluster import OverpassClusterer, radius_sensitivity
 
 # Clustering 300,000 real detections takes about 2 s, so this keeps the map responsive.

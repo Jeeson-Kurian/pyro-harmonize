@@ -8,7 +8,7 @@
 
 <p align="center">
   <b>Live demo: <a href="https://jeeson-kurian.github.io/pyro-harmonize/">jeeson-kurian.github.io/pyro-harmonize</a></b><br>
-  Opens in any browser, nothing to install. Real NASA FIRMS data, northern California, November 2000 to December 2024.
+  Opens in any browser, nothing to install. Real NASA FIRMS data for three regions you can switch between: northern California (November 2000 to December 2024), Portugal and northern Australia (April 2018 to December 2024).
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@ NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS H
 [![tests](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml/badge.svg)](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Live demo:** <https://jeeson-kurian.github.io/pyro-harmonize/> shows the full analysis of the northern California NASA FIRMS data, computed in advance. To choose any area and period, run the app as described in [Quick start](#quick-start).
+**Live demo:** <https://jeeson-kurian.github.io/pyro-harmonize/> shows the full analysis of the NASA FIRMS data for each validated region (northern California, Portugal, northern Australia; choose it at the top of the page), computed in advance. To choose any area and period, run the app as described in [Quick start](#quick-start).
 
 ---
 

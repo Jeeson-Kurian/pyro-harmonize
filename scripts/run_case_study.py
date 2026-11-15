@@ -163,7 +163,7 @@ def build_report(summary, sensitivity, radius, check=None, switch_off=None) -> s
                    f"{p['days_with_detections']:,} | {levels} |")
     q = s["quality_control"]
     out += ["", "## Quality control", "",
-            f"{q['input_rows']:,} rows read, {q['output_rows']:,} used. Removed: {q['dropped_low_confidence']:,} "
+            f"{q['input_rows']:,} rows read, {q['output_rows']:,} passed quality control. Removed: {q['dropped_low_confidence']:,} "
             f"low-confidence, {q['dropped_non_vegetation_type']:,} non-vegetation hot spots, "
             f"{q['dropped_duplicates']:,} duplicates, {q['dropped_invalid_position_or_time']:,} without valid "
             f"position or time, {q['dropped_unknown_platform']:,} from an unidentified platform. "

@@ -20,7 +20,7 @@ Data: NASA FIRMS active-fire detections (see the table of platforms below).
 
 ## Quality control
 
-109,169 rows read, 93,811 used. Removed: 4,666 low-confidence, 10,692 non-vegetation hot spots, 0 duplicates, 0 without valid position or time, 0 from an unidentified platform. 0 rows had no `type` field and could not be screened for static sources.
+109,169 rows read, 93,811 passed quality control. Removed: 4,666 low-confidence, 10,692 non-vegetation hot spots, 0 duplicates, 0 without valid position or time, 0 from an unidentified platform. 0 rows had no `type` field and could not be screened for static sources.
 
 ## Cross-sensor validation (held-out data)
 

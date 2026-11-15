@@ -15,7 +15,7 @@ adequate data coverage. Otherwise the answer is "not enough data", not a number.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd

@@ -83,3 +83,19 @@ def test_switch_off_endpoint(client):
 def test_index_page_is_served(client):
     page = client.get("/")
     assert page.status_code == 200 and "PyroHarmonize" in page.text
+
+
+def test_static_demo_build_writes_every_file_the_page_requests(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYRO_DEMO", raising=False)          # the API tests force simulated data
+    import json
+    import os
+    from scripts.build_static_site import REGIONS, build
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    portugal = next(r for r in REGIONS if r["id"] == "portugal")
+    build(os.path.join(root, portugal["data"]), str(tmp_path))
+    data = tmp_path / "demo-data"
+    for name in ("meta", "analysis", "clusters", "sensitivity", "switch_off"):
+        json.loads((data / f"{name}.json").read_text(encoding="utf-8"))   # valid JSON, no NaN
+    assert (data / "daily.csv").exists() and (data / "monthly.csv").exists()
+    page = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert "window.PYRO_STATIC = true" in page and 'id="regionRow" hidden' in page
