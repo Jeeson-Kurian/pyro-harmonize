@@ -21,8 +21,8 @@ half-days observed by both platforms:
 Nothing here is trusted until it has been tested on data that were not used
 for fitting. Each candidate, including the do-nothing and constant-ratio
 baselines, is scored on held-out years (grouped K-fold) and again on a
-forward-in-time split. The simplest method whose held-out error is within 2 %
-of the best is the one applied. If a baseline wins, the baseline is used.
+forward-in-time split. The selector starts with the simplest available candidate. A later
+candidate replaces it only if held-out scaled RMSE falls by more than 2 %.
 
 There are no fallback numbers. If the overlap is too small to fit AND validate,
 the platform is reported as "not calibrated" and is left out of the harmonised
@@ -425,8 +425,9 @@ class TargetCalibration:
             "validation_design": self.validation_design,
             "selected_count_method": self.count_method,
             "selected_frp_method": self.frp_method,
-            "selection_rule": (f"simplest method whose held-out scaled RMSE is within "
-                               f"{int(PREFER_SIMPLER_WITHIN * 100)} % of the best"),
+            "selection_rule": ("try candidates from simplest to most complex and switch only when held-out "
+                               f"scaled RMSE falls by more than {int(PREFER_SIMPLER_WITHIN * 100)} % "
+                               "relative to the current choice"),
             "cross_validation": self.cv_scores,
             "forward_in_time_test": self.forward_scores,
             "monthly_interval": self.interval,

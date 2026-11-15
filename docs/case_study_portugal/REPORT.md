@@ -29,7 +29,7 @@ Data: NASA FIRMS active-fire detections (see the table of platforms below).
 - Test design: leave-years-out, 5 folds over 7 years
 - Matched cell half-days: 776 seen by both, 2,065 only by Terra MODIS, 2,087 only by Aqua MODIS, over 81 months
 - Median time between the two overpasses: 216 min; 0 % within 15 min
-- Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
+- Selection rule: try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice
 
 Active fire cells per month:
 
@@ -61,7 +61,7 @@ Empirical 90 % band for monthly cells (square-root scale, from 81 held-out month
 - Test design: leave-years-out, 5 folds over 7 years
 - Matched cell half-days: 1,884 seen by both, 8,113 only by Suomi-NPP VIIRS, 979 only by Aqua MODIS, over 81 months
 - Median time between the two overpasses: 24 min; 37 % within 15 min
-- Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
+- Selection rule: try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice
 
 Active fire cells per month:
 
@@ -93,7 +93,7 @@ Empirical 90 % band for monthly cells (square-root scale, from 81 held-out month
 - Test design: leave-years-out, 5 folds over 7 years
 - Matched cell half-days: 1,936 seen by both, 8,699 only by NOAA-20 VIIRS, 927 only by Aqua MODIS, over 81 months
 - Median time between the two overpasses: 24 min; 36 % within 15 min
-- Selection rule: simplest method whose held-out scaled RMSE is within 2 % of the best
+- Selection rule: try candidates from simplest to most complex and switch only when held-out scaled RMSE falls by more than 2 % relative to the current choice
 
 Active fire cells per month:
 

@@ -1,63 +1,24 @@
 # PyroHarmonize
 
-**A burning activity calendar that puts MODIS and VIIRS active-fire records on one scale, and shows how well that works.**
+How much would the fire-activity calendar change if Aqua MODIS stopped reporting and only VIIRS remained? PyroHarmonize uses overlapping NASA FIRMS records to estimate the active grid cells Aqua would have reported.
 
-<p align="center">
-  <a href="https://jeeson-kurian.github.io/pyro-harmonize/"><img src="https://img.shields.io/badge/%E2%96%B6%20LIVE%20DEMO-Open%20the%20dashboard-E8590C?style=for-the-badge" alt="Live demo: open the dashboard" height="40"></a>
-</p>
+[Open the northern California dashboard](https://jeeson-kurian.github.io/pyro-harmonize/) · [Design rationale](docs/DESIGN_RATIONALE.md) · [Run locally](#quick-start)
 
-<p align="center">
-  <b>Live demo: <a href="https://jeeson-kurian.github.io/pyro-harmonize/">jeeson-kurian.github.io/pyro-harmonize</a></b><br>
-  Opens in any browser, nothing to install. Real NASA FIRMS data, northern California, April 2018 to December 2024.
-</p>
+![Northern California fire calendar and validation panel](docs/img/demo_preview.png)
 
-<p align="center">
-  <a href="https://jeeson-kurian.github.io/pyro-harmonize/"><img src="docs/img/demo_preview.png" width="860" alt="PyroHarmonize dashboard: burning activity calendar and held-out test of VIIRS against Aqua MODIS"></a><br>
-  <sub>Click the picture to open the live dashboard.</sub>
-</p>
+The clearest test withholds both MODIS instruments for 2023 and 2024. Across those 24 months, the VIIRS reconstruction underestimated Aqua's total active cells by **6.0% in northern California** and overestimated them by **2.9% in Portugal**. Median absolute monthly errors were **13.4%** and **14.5%**. Fire radiative power (FRP) was harder to reconstruct. Its totals were **37.6%** and **17.1%** below Aqua in the same two regions. Each region had its own calibration. [California report](docs/case_study/REPORT.md) · [Portugal report](docs/case_study_portugal/REPORT.md)
 
-NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS Hot Spots* · [challenge page](https://www.spaceappschallenge.org/2026/challenges/modis-and-viirs-hot-spots/)
-
-[![tests](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml/badge.svg)](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
-**Live demo:** <https://jeeson-kurian.github.io/pyro-harmonize/> shows the full analysis of the northern California NASA FIRMS data, computed in advance. To choose any area and period, run the app as described in [Quick start](#quick-start).
-
----
-
-## Status: read this first
-
-| | |
-|---|---|
-| Real-data pipeline (download, quality control, harmonisation, validation, web app) | **Implemented and covered by automated tests** |
-| Real NASA FIRMS case study | **Done for two regions, April 2018 to December 2024:** northern California (908,032 detections after quality control) and Portugal (93,811). On months the model never saw, harmonisation cuts the difference between VIIRS and Aqua MODIS from about +500 % to +780 % (raw hot spots) to under 2 % in both regions. Details: [Real-data result](#real-data-result), [docs/case_study/REPORT.md](docs/case_study/REPORT.md) and [docs/case_study_portugal/REPORT.md](docs/case_study_portugal/REPORT.md). |
-| MODIS switched off (simulated end of mission) | **Tested in both regions.** MODIS removed for 2023 and 2024, calibration fitted on the earlier years only, record continued from VIIRS alone: −6.0 % (California) and +2.9 % (Portugal) against what Aqua MODIS really observed, where raw VIIRS hot spots would give +523 % and +628 %. Shown live in the online demo. Details: [Real-data result](#real-data-result). |
-| What it does not show yet | That the method works in every fire regime. Each validated region is listed under [Real-data result](#real-data-result), fitted and tested on its own data. |
+Built for the NASA Space Apps [Harmonization of MODIS and VIIRS Hot Spots challenge](https://www.spaceappschallenge.org/2026/challenges/modis-and-viirs-hot-spots/).
 
 ## The problem
 
 Satellites have recorded active-fire hot spots since late 2000, but the record is split across instruments that cannot be compared directly. A MODIS pixel is about 1 km wide (and grows toward the edge of the swath); a VIIRS pixel is 375 m. One fire front is one MODIS hot spot and many VIIRS hot spots, VIIRS sees smaller fires, and there are now up to three VIIRS satellites. A plain hot-spot count therefore jumps when VIIRS starts and again with every added satellite, with no change in burning.
 
-This matters now: Suomi-NPP stopped delivering data on 2 November 2026 and the two MODIS instruments are near the end of their missions. The record has to continue on NOAA-20 and NOAA-21 without a break in meaning.
-
 ## The approach
 
-1. **One unit for every sensor.** Hot spots are reduced to *active fire cells*: 10 km equal-area grid cells per local day or night. This removes most of the pixel-size effect before any modelling.
-2. **One reference scale.** Everything is expressed as "what Aqua MODIS would have reported". A coarse sensor cannot be upgraded to see what it missed, but a fine one can be degraded. Aqua shares the early-afternoon orbit with every VIIRS satellite; Terra (morning orbit) is handled separately.
-3. **Calibration on matched observations.** For cells that a VIIRS platform reports, a model estimates the probability that Aqua MODIS reports them too, and their expected Aqua FRP.
-4. **Held-out validation decides.** The model competes with simple baselines on years it has not seen, and on a forward-in-time split. The simplest method within 2 % of the best is used. If the data are too thin to validate anything, the platform is reported as "not calibrated" and left out. There are no fallback numbers in the code.
-5. **Missing is not zero.** Days without data coverage are shown as missing everywhere. Several satellites are averaged, never added.
-
-```mermaid
-flowchart LR
-    A["NASA FIRMS CSV<br/>MODIS C6.1, VIIRS 375 m"] --> B["Quality control<br/>type, confidence, duplicates"]
-    B --> C["Common unit<br/>10 km cell x local half-day"]
-    C --> D["Coverage<br/>data vs no data"]
-    D --> E["Matched pairs<br/>target vs Aqua MODIS"]
-    E --> F["Candidates + held-out test<br/>simplest good method wins"]
-    F --> G["Harmonised daily record<br/>source of every day kept"]
-    G --> H["Calendar · anomalies · critical periods<br/>map · CSV export"]
-```
+1. Group detections by platform, grid cell (about 10 × 10 km) and local day or night. A fire front can produce several VIIRS pixels in the same cell.
+2. Pair each platform with Aqua on dates covered by both. Compare a shared grid, a constant ratio and detection models on held-out periods. The selector tries candidates in order of complexity and switches only for a reduction of more than 2% in held-out scaled RMSE.
+3. Keep Aqua observations where available. On other dates, average the calibrated VIIRS estimates available that day. Use calibrated Terra if neither source is available, and leave a gap if none qualifies.
 
 Full description with equations and limits: [docs/METHODS.md](docs/METHODS.md).
 
@@ -150,7 +111,7 @@ MODIS switched off from 2023-01-01 (calibration on earlier years only): raw VIIR
 
 MODIS switched off from 2023-01-01 (calibration on earlier years only): raw VIIRS hot spots +628.4 %; record continued from VIIRS +2.9 % against what Aqua MODIS really observed, median monthly error 14.5 %, 92 % of months inside the 90 % band; FRP -17.1 %.
 
-Percentages are total differences from what Aqua MODIS reported in months that were not used for fitting. Each region was fitted and tested on its own data.
+The raw column compares target and Aqua hot-spot counts. The grid and harmonised columns compare active cells against Aqua. Total bias can cancel errors of opposite signs across months. The median monthly error uses absolute errors for months with more than five observed Aqua cells. Each region was fitted and tested on its own data.
 <!-- CASE_STUDY:END -->
 
 ## Self-test on simulated data
@@ -167,20 +128,6 @@ Percentages are total differences from what Aqua MODIS reported in months that w
 In a blind test on a second simulated world (`tests/test_harmonization.py`), Aqua was hidden for the last four years and reconstructed from VIIRS: the monthly totals matched the hidden Aqua record within 2 % overall (correlation 0.997), and 92 % of months fell inside the 90 % range.
 
 **These numbers describe the simulator, not the Earth.** They show that the code does what it says. Real-data numbers come from `docs/case_study/REPORT.md`.
-
-## Implemented and not implemented
-
-| Implemented | Not implemented |
-|---|---|
-| FIRMS API downloader with manifest, caching, retries | Automatic download from inside the web app |
-| Ingestion of API and archive CSV layouts, SP and NRT | Cloud and swath masks (not available from hot-spot files) |
-| Quality control with per-rule counts | Land-cover or biome-specific calibration |
-| Equal-area cells, local-solar half-days, geodesic clustering | Fire radiative energy (time-integrated FRP) |
-| Per-platform calibration with held-out and forward tests | Validation across many regions |
-| Aqua-equivalent daily record with per-day source | Forecasting |
-| Empirical 90 % range for sensor-converted months | Formal error propagation |
-| Calendar, anomalies, critical weeks, fire-year seasonality | Polygon areas (bounding boxes only) |
-| CSV export with provenance | |
 
 ## Data and citation
 
@@ -202,7 +149,7 @@ More in [docs/METHODS.md](docs/METHODS.md), section 11.
 
 ## Use of AI
 
-Parts of the code, tests and documentation in this repository were written with the assistance of an AI model (Claude, by Anthropic). No AI-generated images, video or audio are used: every chart, map and screenshot is drawn by this software from NASA FIRMS data. The data are NASA FIRMS data, or simulated data that are labelled as synthetic wherever they appear.
+Claude assisted with implementation, tests and documentation. The [MODIS switch-off commit](https://github.com/Jeeson-Kurian/pyro-harmonize/commit/5199d46f412a7fdd7e0265c9c110eff9b6601d20) records Claude as a co-author. Codex assisted with the design rationale and documentation revisions. The dashboard renders charts from the selected dataset. The published regional reports use NASA FIRMS observations, and the simulator supplies labelled synthetic data for tests and demo mode.
 
 ## Project layout
 
@@ -231,7 +178,6 @@ docs/METHODS.md              method, validation and limits
 
 - Event: NASA International Space Apps Challenge Ahlen 2026
 - Challenge: Harmonization of MODIS and VIIRS Hot Spots
-- Target Global Awards: Best Use of Data / Galactic Impact
 - Lead Organizer: GDG Ahlen / NASA Space Apps Local Lead Anna Muzykina
 - Team: PyroHarmonize
 
