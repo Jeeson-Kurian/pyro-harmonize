@@ -32,7 +32,8 @@ NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS H
 | Real-data pipeline (download, quality control, harmonisation, validation, web app) | **Implemented and covered by automated tests** |
 | Real NASA FIRMS case study | **Done for three regions and two fire regimes:** northern California, November 2000 to December 2024 (991,188 detections after quality control); Portugal (93,811) and the tropical savanna of northern Australia (1,872,939), April 2018 to December 2024. On months the model never saw, harmonisation cuts the difference between VIIRS and Aqua MODIS from about +500 % to +780 % (raw hot spots) to under 2 % in every region. Details: [Real-data result](#real-data-result) and the reports for [California](docs/case_study/REPORT.md), [Portugal](docs/case_study_portugal/REPORT.md) and [northern Australia](docs/case_study_australia/REPORT.md). |
 | MODIS switched off (simulated end of mission) | **Tested in all three regions.** MODIS removed for 2023 and 2024, calibration fitted on the earlier years only, record continued from VIIRS alone: −6.0 % (California), +2.9 % (Portugal) and −6.3 % (northern Australia) against what Aqua MODIS really observed, where raw VIIRS hot spots would give +523 %, +628 % and +600 %. Shown live in the online demo. Details: [Real-data result](#real-data-result). |
-| What it does not show yet | That the method works in every fire regime (boreal forest and crop burning are not tested), or that a calibration transfers from one region to another. Each region was fitted and tested on its own data. |
+| Robustness checks | **Done, results reported as they are** ([docs/robustness/REPORT.md](docs/robustness/REPORT.md)). A calibration fitted in one region and applied unchanged to another still removes most of the raw gap, but leaves 22 to 55 % monthly error, against 6 to 15 % with the region's own calibration, so every region is calibrated on its own data. Switching MODIS off for 2021-22 (before Aqua's orbit drift) and for 2023-24 gives similar active-cell results in all three regions (−8 % to +3 %). |
+| What it does not show yet | That the method works in every fire regime (boreal forest and crop burning are not tested), or agreement with fire on the ground: Aqua MODIS is the reference, not ground truth. A new area needs its own calibration. |
 
 ## The problem
 
@@ -200,10 +201,11 @@ We acknowledge the use of data from NASA's Fire Information for Resource Managem
 
 ## Limits
 
-- Three regions are validated (northern California, Portugal, northern Australia), covering summer-dry wildfires and tropical savanna fires. Each has its own calibration. That does not prove the method works in every fire regime or that a calibration transfers between regions; run the case study for each area you care about.
+- Three regions are validated (northern California, Portugal, northern Australia), covering summer-dry wildfires and tropical savanna fires. Each has its own calibration: one fitted elsewhere and applied unchanged leaves 22 to 55 % monthly error instead of 6 to 15 % ([robustness checks](docs/robustness/REPORT.md)). That does not prove the method works in every fire regime; run the case study for each area you care about.
 - Hot-spot files do not say where the satellite looked and saw nothing, or where cloud hid the ground.
-- FRP values are instantaneous power at overpass time. They are not energy. Harmonised FRP is less certain than harmonised cell counts. It held in the northern Australian savanna (+1.4 % when MODIS was switched off) but not in California (−37.6 %) or Portugal (−17.1 %), where the Aqua/VIIRS FRP ratio for the same cells changes from year to year (see the observing-system check in each report).
+- FRP values are instantaneous power at overpass time. They are not energy. Harmonised FRP is less certain than harmonised cell counts. It held in the northern Australian savanna (+1.4 % when MODIS was switched off) but not in California (−37.6 %) or Portugal (−17.1 %), where the Aqua/VIIRS FRP ratio for the same cells changes from year to year (see the observing-system check in each report). In California, FRP continued better when MODIS was switched off before Aqua's orbit drift (−19.8 % for 2021-22) than after it (−37.6 % for 2023-24); in Portugal it was poor in both periods ([robustness checks](docs/robustness/REPORT.md)).
 - Terra and Aqua have drifted from their original orbits; the report measures this from the data. In California, Aqua's median daytime detection time stayed between 13:02 and 13:13 local solar time from 2002 to 2022, then moved to 13:25 in 2023 and 13:43 in 2024.
+- The 90 % band comes from the scatter of held-out months. In the switch-off tests it contained the real Aqua value in 96 % of months in California but only 75 to 92 % in Portugal and northern Australia, so there it is too narrow.
 - Terra-derived values (before July 2002) cross the diurnal cycle and are the least certain part of the record.
 - Trends are observed changes in a mixed-sensor record. No cause is assigned.
 - Not for operational fire-fighting decisions.
@@ -233,6 +235,7 @@ scripts/run_case_study.py    reproducible validation report
 scripts/make_submission.py   download + report + README result in one command
 scripts/build_static_site.py online demo for GitHub Pages (docs/index.html, docs/demo-data/)
 scripts/merge_firms.py       join downloads of one area (e.g. an earlier period)
+scripts/run_robustness.py    calibration transfer between regions; switch-off before and after the orbit drift (docs/robustness/)
 tests/                       automated tests
 docs/METHODS.md              method, validation and limits
 ```

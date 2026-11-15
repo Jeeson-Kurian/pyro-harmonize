@@ -192,6 +192,16 @@ months whose real Aqua value lies inside the stated 90 % band, and, for contrast
 the difference that raw VIIRS hot-spot counts would give. The test needs at least
 four calendar years in the selection.
 
+**Robustness checks (`scripts/run_robustness.py`).** Two further tests use the
+validated regions together. *Calibration transfer* (`calibration_transfer_test`):
+the calibration fitted in one region on all of its years is applied unchanged to
+another region's cells and scored against that region's real Aqua values, with the
+same complete-month rule; the target region's own held-out score is shown beside it.
+*Switch-off by period*: the switch-off test is repeated with MODIS removed for the
+two years before Aqua's orbit drift (data up to 2022, so calibration has fewer
+years) and compared with the test on the last two years. Results:
+[docs/robustness/REPORT.md](robustness/REPORT.md).
+
 ## 9. Calendar, seasonality, anomalies
 
 - **Calendar.** Year x 366 days. Day 366 exists only in leap years.

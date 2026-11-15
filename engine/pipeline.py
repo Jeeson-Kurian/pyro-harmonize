@@ -584,6 +584,58 @@ def modis_switch_off_test(detections: pd.DataFrame, manifest: Optional[Dict[str,
     })
 
 
+# ------------------------------------------------------------- calibration transfer
+
+def calibration_transfer_test(source: Analysis, target: Analysis, platform: str) -> Dict[str, Any]:
+    """
+    Apply the calibration fitted in one region (`source`, all of its years) unchanged to
+    another region (`target`) and compare the result with what Aqua MODIS really observed
+    there. The target region's data are never used for fitting. Only days on which both
+    the platform and Aqua are covered in the target region are used, and a month counts
+    only if every one of its days qualifies.
+    """
+    calib = source.calibrations.get(platform)
+    if calib is None or calib.status != "calibrated":
+        return json_safe({"available": False, "reason": f"{platform} is not calibrated in the source region."})
+    if target.summary.get("empty") or platform not in target.coverage or "Aqua" not in target.coverage:
+        return json_safe({"available": False, "reason": f"No {platform} or Aqua data in the target region."})
+    dates = target.daily.index
+    usable = (target.coverage[platform].reindex(dates).fillna(False).values
+              & target.coverage["Aqua"].reindex(dates).fillna(False).values)
+    rows = target.cells[target.cells["platform"] == platform]
+    eq = calib.apply(rows)
+    per_day = (rows[["local_date"]].assign(c=eq["eq_cells"].values, f=eq["eq_frp_mw"].values)
+               .groupby("local_date")[["c", "f"]].sum().reindex(dates).fillna(0.0))
+    month = pd.DatetimeIndex(dates).to_period("M")
+    complete = pd.Series(usable, index=month).groupby(level=0).all()
+    months = complete.index[complete.values]
+    keep = np.isin(month, months) & usable
+
+    def monthly(values: np.ndarray) -> np.ndarray:
+        return pd.Series(values[keep]).groupby(month[keep]).sum().reindex(months).values
+
+    obs_c, obs_f = monthly(target.daily["Aqua_cells"].values), monthly(target.daily["Aqua_frp_mw"].values)
+    pred_c, pred_f = monthly(per_day["c"].values), monthly(per_day["f"].values)
+    raw_t, raw_a = monthly(target.daily[f"{platform}_hotspots"].values), monthly(target.daily["Aqua_hotspots"].values)
+    own = target.calibrations.get(platform)
+    own_cv = (own.cv_scores["count"][own.count_method] if own is not None and own.status == "calibrated" else None)
+    own_frp = (own.cv_scores["frp"][own.frp_method] if own is not None and own.status == "calibrated"
+               and own.frp_method else None)
+    return json_safe({
+        "available": True,
+        "platform": platform,
+        "source_method": {"count": calib.count_method, "frp": calib.frp_method},
+        "months": len(months),
+        "raw_hotspot_bias_pct": round(float(100.0 * (raw_t.sum() - raw_a.sum()) / raw_a.sum()), 1) if raw_a.sum() else None,
+        "count": _score(pred_c, obs_c, "count"),
+        "frp": _score(pred_f, obs_f, "frp") if calib.frp_method else {"available": False},
+        "own_region_held_out": {
+            "count": {k: own_cv.get(k) for k in ("total_bias_pct", "median_abs_pct_error")} if own_cv else None,
+            "frp": {k: own_frp.get(k) for k in ("total_bias_pct", "median_abs_pct_error")} if own_frp else None,
+        },
+    })
+
+
 # ----------------------------------------------------------------------------- exports
 
 def export_frame(analysis: Analysis, kind: str) -> pd.DataFrame:

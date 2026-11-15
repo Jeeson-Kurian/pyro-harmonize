@@ -203,3 +203,13 @@ def test_switch_off_needs_enough_years(world, detections):
     short = run_analysis(detections, world["manifest"], AnalysisConfig(start="2021-01-01", end="2023-12-31"))
     result = modis_switch_off_test(detections, world["manifest"], short)
     assert result["available"] is False and "four calendar years" in result["reason"]
+
+
+def test_calibration_transfer_scores_a_borrowed_calibration_against_real_aqua(analysis):
+    from engine.pipeline import calibration_transfer_test
+    result = calibration_transfer_test(analysis, analysis, "NOAA20")
+    assert result["available"] and result["months"] > 12
+    assert result["raw_hotspot_bias_pct"] > 100                  # raw counts are far off
+    assert abs(result["count"]["total_bias_pct"]) < 10            # applied in its own region: close to Aqua
+    assert result["own_region_held_out"]["count"]["median_abs_pct_error"] is not None
+    assert calibration_transfer_test(analysis, analysis, "NOAA21")["available"] is False
