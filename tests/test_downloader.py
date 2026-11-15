@@ -254,3 +254,25 @@ def test_gzip_output_is_loaded_once_and_replaces_the_plain_file(tmp_path):
     data, provenance = load_firms_directory(str(tmp_path))
     assert len(data) == 3 and set(data["source"]) == {"VIIRS_SNPP_SP"}
     assert [f["file"] for f in provenance["files"]] == ["VIIRS_SNPP_SP.csv.gz"]
+
+
+def test_merging_two_periods_of_one_area_joins_coverage_without_a_seam(tmp_path):
+    from engine.data_loader import load_firms_directory
+    from scripts.merge_firms import merge
+    args = dict(chunk_days=5, pause=0, backoff=0, log=lambda *_: None)
+    new, old = tmp_path / "new", tmp_path / "old"
+    download((-124, 36, -119, 41), date(2020, 8, 11), date(2020, 8, 20), ["VIIRS_SNPP_SP"], str(new), SECRET,
+             session=FakeSession(), **args)
+    download((-124, 36, -119, 41), date(2020, 8, 1), date(2020, 8, 10), ["VIIRS_SNPP_SP"], str(old), SECRET,
+             session=FakeSession(), compress=True, **args)
+    merged = merge(str(new), [str(old)], log=lambda *_: None)
+    entry = merged["sources"]["VIIRS_SNPP_SP"]
+    assert entry["coverage"] == [["2020-08-01", "2020-08-20"]] and entry["rows"] == 4
+    assert merged["requested"] == {"start": "2020-08-01", "end": "2020-08-20"}
+    data, provenance = load_firms_directory(str(new))
+    assert len(data) == 4 and [f["file"] for f in provenance["files"]] == ["VIIRS_SNPP_SP.csv.gz"]
+    other = tmp_path / "other"
+    download((-10, 36, -6, 42), date(2020, 8, 1), date(2020, 8, 5), ["VIIRS_SNPP_SP"], str(other), SECRET,
+             session=FakeSession(), **args)
+    with pytest.raises(SystemExit):
+        merge(str(new), [str(other)], log=lambda *_: None)
