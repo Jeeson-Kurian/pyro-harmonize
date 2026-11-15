@@ -190,7 +190,8 @@ def build_report(summary, sensitivity, radius, check=None) -> str:
         out.append("")
     if radius and radius.get("rows"):
         out += ["## Sensitivity of cluster counts to the clustering radius", "",
-                f"Busiest month in the selection ({radius['sample_month']}). Cluster counts change with the radius, "
+                f"Month with the most detections ({radius['sample_month']}; detections from "
+                f"{radius['sample_period']}). Cluster counts change with the radius, "
                 "which is why clusters are used for display only and not for the harmonised record.", "",
                 "| Radius | Sensor | Detections | Clusters | Pixels per cluster |", "|---:|---|---:|---:|---:|"]
         for r in radius["rows"]:

@@ -41,6 +41,7 @@
           border-radius: 7px; padding: 6px 9px; }
   input[type=number] { width: 92px; }
   button { cursor: pointer; }
+  button:disabled, input:disabled { opacity: 0.45; cursor: not-allowed; }
   button.primary { background: var(--s1); border-color: var(--s1); color: #fff; font-weight: 600; }
   button:hover { border-color: var(--muted); }
   a.btn { display: inline-block; text-decoration: none; color: var(--text); background: var(--card2);
@@ -322,8 +323,15 @@ function heatmap(el, o) {
 /* ---- application ------------------------------------------------------------------------- */
 let META = null, A = null, calView = 'harmonized_cells', calTarget = null, map = null, mapLayer = null, mapBox = null;
 
+const STATIC = window.PYRO_STATIC === true;   // set by scripts/build_static_site.py
+const REPO = 'https://github.com/Jeeson-Kurian/pyro-harmonize';
+function staticUrl(url) {
+  for (const name of ['meta', 'analysis', 'clusters', 'sensitivity'])
+    if (url.startsWith('/api/' + name)) return 'demo-data/' + name + '.json';
+  return url;
+}
 async function getJSON(url) {
-  const r = await fetch(url);
+  const r = await fetch(STATIC ? staticUrl(url) : url);
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(body.detail || ('Request failed (' + r.status + ')'));
   return body;
@@ -350,6 +358,12 @@ async function init() {
   $('modeChip').innerHTML = META.synthetic
     ? '<span class="chip"><span class="dot" style="background:' + C.warn + '"></span>⚠ Synthetic demo data</span>'
     : '<span class="chip"><span class="dot" style="background:#0ca30c"></span>NASA FIRMS data</span>';
+  if (STATIC) {
+    ['inW', 'inS', 'inE', 'inN', 'inStart', 'inEnd', 'btnApply', 'btnReset', 'btnView'].forEach(id => $(id).disabled = true);
+    const note = document.createElement('p'); note.className = 'note';
+    note.innerHTML = 'Online demo: the full analysis of the loaded NASA data, computed in advance. To choose any area and period, run the app yourself (<code>python app.py</code>, see <a href="' + REPO + '" target="_blank" rel="noopener">GitHub</a>).';
+    $('selNote').parentNode.insertBefore(note, $('selNote'));
+  }
   $('btnApply').onclick = load;
   $('btnReset').onclick = () => { resetControls(); load(); };
   $('btnView').onclick = () => { if (!map) return; const b = map.getBounds();
@@ -360,7 +374,11 @@ async function init() {
 async function load() {
   const q = selection().toString();
   $('content').innerHTML = '<div class="loading">Analysing…</div>';
-  ['Daily', 'Monthly', 'Det'].forEach((k, i) => $('dl' + k).href = '/api/export/' + ['daily', 'monthly', 'detections'][i] + '.csv' + (q ? '?' + q : ''));
+  if (STATIC) {
+    $('dlDaily').href = 'demo-data/daily.csv'; $('dlMonthly').href = 'demo-data/monthly.csv';
+    $('dlDet').href = REPO + '/tree/main/data/firms'; $('dlDet').removeAttribute('download'); $('dlDet').textContent = 'Detections (NASA FIRMS files on GitHub)';
+  } else
+    ['Daily', 'Monthly', 'Det'].forEach((k, i) => $('dl' + k).href = '/api/export/' + ['daily', 'monthly', 'detections'][i] + '.csv' + (q ? '?' + q : ''));
   try { A = await getJSON('/api/analysis' + (q ? '?' + q : '')); }
   catch (e) { $('content').innerHTML = '<div class="card"><div class="warn">' + esc(e.message) + '</div></div>'; return; }
   render();
@@ -576,6 +594,7 @@ function renderMap() {
     if (b) { L.rectangle([[b[1], b[0]], [b[3], b[2]]], {color: '#f0efec', weight: 1, fill: false, dashArray: '4 4'}).addTo(map); map.fitBounds([[b[1], b[0]], [b[3], b[2]]]); }
   } else { $('map').style.height = 'auto'; $('map').style.padding = '10px'; $('map').innerHTML = '<div class="loading">Loading clusters…</div>'; }
   $('mapGo').onclick = loadClusters; $('sensGo').onclick = loadSensitivity;
+  if (STATIC) ['mapFrom', 'mapTo', 'mapEps', 'mapGo'].forEach(id => $(id).disabled = true);
   loadClusters();
 }
 async function loadClusters() {
@@ -601,7 +620,7 @@ async function loadClusters() {
 async function loadSensitivity() {
   $('sensBox').innerHTML = '<p class="note">Computing…</p>';
   let r; try { r = await getJSON('/api/sensitivity?' + selection().toString()); } catch (e) { $('sensBox').innerHTML = '<div class="warn">' + esc(e.message) + '</div>'; return; }
-  $('sensBox').innerHTML = '<h3>Cluster counts depend on the radius (busiest month, ' + esc(r.sample_month) + ')</h3><table><thead><tr><th>Radius</th><th>Sensor</th><th class="num">Detections</th><th class="num">Clusters</th><th class="num">Pixels per cluster</th></tr></thead><tbody>' +
+  $('sensBox').innerHTML = '<h3>Cluster counts depend on the radius (detections from ' + esc(r.sample_period) + ', the month with the most detections)</h3><table><thead><tr><th>Radius</th><th>Sensor</th><th class="num">Detections</th><th class="num">Clusters</th><th class="num">Pixels per cluster</th></tr></thead><tbody>' +
     r.rows.map(x => '<tr><td>' + x.eps_km + ' km</td><td>' + esc(x.sensor) + '</td><td class="num">' + fmt(x.detections, 0) + '</td><td class="num">' + fmt(x.clusters, 0) + '</td><td class="num">' + fmt(x.pixels_per_cluster, 2) + '</td></tr>').join('') +
     '</tbody></table><p class="note">Because the number of clusters changes with the chosen radius, clusters are used here for display only. The harmonised record is built on fixed grid cells instead.</p>';
 }

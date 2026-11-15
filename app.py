@@ -27,7 +27,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from engine import __version__
-from engine.pipeline import Analysis, AnalysisConfig, export_frame, load_dataset, run_analysis
+from engine.pipeline import Analysis, AnalysisConfig, dataset_meta, export_frame, load_dataset, run_analysis
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CACHE_SIZE = 8
@@ -104,24 +104,7 @@ def health():
 def meta():
     """What data the server holds: real FIRMS files or the synthetic demo."""
     detections, manifest, info = get_dataset()
-    bbox = (manifest or {}).get("bbox")
-    if not bbox and len(detections):
-        bbox = [float(detections["longitude"].min()), float(detections["latitude"].min()),
-                float(detections["longitude"].max()), float(detections["latitude"].max())]
-    requested = (manifest or {}).get("requested") or {}
-    return {
-        "version": __version__,
-        "mode": info["mode"],
-        "synthetic": info["mode"] == "synthetic",
-        "why_synthetic": info.get("why"),
-        "files": info.get("files", []),
-        "bbox": bbox,
-        "start": requested.get("start") or (detections["acq_date"].min() if len(detections) else None),
-        "end": requested.get("end") or (detections["acq_date"].max() if len(detections) else None),
-        "rows": int(len(detections)),
-        "manifest": {k: v for k, v in (manifest or {}).items() if k in
-                     ("provider", "api", "retrieved_utc", "requested", "bbox", "sources", "note", "platform_gaps")},
-    }
+    return dataset_meta(detections, manifest, info)
 
 
 @app.get("/api/analysis")

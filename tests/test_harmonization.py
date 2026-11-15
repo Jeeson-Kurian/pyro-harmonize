@@ -171,3 +171,10 @@ def test_quiet_period_inside_coverage_is_zero_not_missing(world, detections):
     assert d["harmonized_cells"].notna().all()
     assert d["harmonized_frp_mw"].notna().all()
     assert d["harmonized_cells"].sum() < 5             # outside the simulated fire season
+
+
+def test_map_handles_a_busy_window_without_refusing(analysis):
+    from engine.pipeline import MAX_MAP_DETECTIONS
+    assert MAX_MAP_DETECTIONS >= 300_000
+    result = analysis.clusters("2008-01-01", "2023-12-31", 2.0)   # the whole simulated record
+    assert "error" not in result and result["total_clusters"] >= result["shown"] > 0

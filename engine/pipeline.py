@@ -33,6 +33,9 @@ from .matching import build_pairs, platform_coverage
 from .schema import FIRMS_SOURCES, PLATFORM_LABELS, PLATFORMS, REFERENCE_PLATFORM
 from .spatial_cluster import OverpassClusterer, radius_sensitivity
 
+# Clustering 300,000 real detections takes about 2 s, so this keeps the map responsive.
+MAX_MAP_DETECTIONS = 400_000
+
 SOURCE_LABELS = {0: "no data", 1: "Aqua MODIS observed", 2: "VIIRS-derived (Aqua-equivalent)",
                  3: "Terra-derived (Aqua-equivalent)"}
 
@@ -100,6 +103,30 @@ def load_dataset(data_dir: Optional[str] = None, force_synthetic: bool = False
     return detections, sim["manifest"], info
 
 
+def dataset_meta(detections: pd.DataFrame, manifest: Optional[Dict[str, Any]],
+                 info: Dict[str, Any]) -> Dict[str, Any]:
+    """What data are loaded: real FIRMS files or the synthetic demo. Used by /api/meta."""
+    from . import __version__
+    bbox = (manifest or {}).get("bbox")
+    if not bbox and len(detections):
+        bbox = [float(detections["longitude"].min()), float(detections["latitude"].min()),
+                float(detections["longitude"].max()), float(detections["latitude"].max())]
+    requested = (manifest or {}).get("requested") or {}
+    return json_safe({
+        "version": __version__,
+        "mode": info["mode"],
+        "synthetic": info["mode"] == "synthetic",
+        "why_synthetic": info.get("why"),
+        "files": info.get("files", []),
+        "bbox": bbox,
+        "start": requested.get("start") or (detections["acq_date"].min() if len(detections) else None),
+        "end": requested.get("end") or (detections["acq_date"].max() if len(detections) else None),
+        "rows": int(len(detections)),
+        "manifest": {k: v for k, v in (manifest or {}).items() if k in
+                     ("provider", "api", "retrieved_utc", "requested", "bbox", "sources", "note", "platform_gaps")},
+    })
+
+
 # ------------------------------------------------------------------------ analysis
 
 class Analysis:
@@ -121,9 +148,9 @@ class Analysis:
         if d.empty:
             return {"clusters": [], "total_clusters": 0, "detections": 0}
         window = d[(d["local_date"] >= np.datetime64(start)) & (d["local_date"] <= np.datetime64(end))]
-        if len(window) > 60000:
-            return {"error": f"{len(window)} detections in this window; choose a shorter period "
-                             "(the limit for interactive clustering is 60,000)."}
+        if len(window) > MAX_MAP_DETECTIONS:
+            return {"error": f"{len(window):,} detections in this window; choose a shorter period "
+                             f"(the limit for the map is {MAX_MAP_DETECTIONS:,})."}
         clusters = OverpassClusterer(eps_km=eps_km).cluster(window)
         total = len(clusters)
         top = clusters.sort_values("n_pixels", ascending=False).head(limit)
@@ -148,10 +175,12 @@ class Analysis:
         month = pd.DatetimeIndex(d["local_date"]).to_period("M")
         busiest = month.value_counts().idxmax()
         sample = d[month == busiest]
-        if len(sample) > 40000:
+        if len(sample) > MAX_MAP_DETECTIONS:   # keep it fast: first 7 days of that month
             sample = sample[sample["local_date"] <= sample["local_date"].min() + np.timedelta64(6, "D")]
-        return {"sample_month": str(busiest), "detections": int(len(sample)),
-                "rows": radius_sensitivity(sample)}
+        first = pd.Timestamp(sample["local_date"].min()).strftime("%Y-%m-%d")
+        last = pd.Timestamp(sample["local_date"].max()).strftime("%Y-%m-%d")
+        return {"sample_month": str(busiest), "sample_period": f"{first} to {last}",
+                "detections": int(len(sample)), "rows": radius_sensitivity(sample)}
 
 
 def _daily_by_platform(cells: pd.DataFrame, dates: pd.DatetimeIndex, value: str, how: str) -> pd.DataFrame:

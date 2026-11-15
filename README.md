@@ -7,6 +7,8 @@ NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS H
 [![tests](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml/badge.svg)](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+**Online demo:** <https://jeeson-kurian.github.io/pyro-harmonize/> (the full analysis of the northern California NASA FIRMS data, computed in advance; to choose any area and period, run the app as described in [Quick start](#quick-start)).
+
 ---
 
 ## Status: read this first
@@ -106,6 +108,10 @@ To open that region in the app, set `PYRO_DATA_DIR=data/regions/portugal` before
 
 Settings: `PYRO_DATA_DIR` (other data folder), `PYRO_DEMO=1` (force the synthetic demo), `HOST`, `PORT`.
 
+### Online demo (GitHub Pages)
+
+`python scripts/build_static_site.py` writes a static copy of the dashboard to `docs/index.html` and `docs/demo-data/`, with the analysis of `data/firms/` computed in advance. GitHub Pages serves it when the repository setting **Pages → Deploy from a branch → main → /docs** is on. Static hosting cannot run Python, so the online demo shows the whole loaded dataset; choosing another area or period needs the full app. Run the script again after the data change.
+
 ## Real-data result
 
 <!-- CASE_STUDY:START -->
@@ -117,7 +123,15 @@ Settings: `PYRO_DATA_DIR` (other data folder), `PYRO_DEMO=1` (force the syntheti
 | Suomi-NPP VIIRS (81 months) | +764.0 % | +210.7 % | +1.8 % | 13.2 % | -8.5 % | Common grid + detection model with time of year |
 | NOAA-20 VIIRS (81 months) | +781.2 % | +222.0 % | +1.6 % | 14.1 % | -3.5 % | Common grid + detection model with time of year |
 
-Percentages are total differences from what Aqua MODIS reported in months that were not used for fitting. This is one area; it does not validate the method elsewhere.
+**Portugal** (west, south, east, north: -9.6, 36.9, -6.1, 42.2). Period: 2018-04-01 to 2024-12-31. Data: NASA FIRMS, 93,811 detections after quality control. Full report: [docs/case_study_portugal/REPORT.md](docs/case_study_portugal/REPORT.md).
+
+| Platform compared with Aqua MODIS (held-out months) | Raw hot spots | Common grid only | After harmonisation | Median monthly error | Forward-in-time test | Method used |
+|---|---:|---:|---:|---:|---:|---|
+| Terra MODIS (81 months) | +0.6 % | -0.8 % | -0.8 % | 20.6 % | -2.4 % | Common grid only (no calibration) |
+| Suomi-NPP VIIRS (81 months) | +500.4 % | +249.2 % | +0.3 % | 14.7 % | +5.2 % | Common grid + detection model with time of year |
+| NOAA-20 VIIRS (81 months) | +514.0 % | +271.5 % | +0.1 % | 14.3 % | +0.6 % | Common grid + detection model with time of year |
+
+Percentages are total differences from what Aqua MODIS reported in months that were not used for fitting. Each region was fitted and tested on its own data.
 <!-- CASE_STUDY:END -->
 
 ## Self-test on simulated data
@@ -188,6 +202,7 @@ engine/synthetic.py          simulator for tests and demo mode
 data/download_nasa_firms.py  FIRMS downloader
 scripts/run_case_study.py    reproducible validation report
 scripts/make_submission.py   download + report + README result in one command
+scripts/build_static_site.py online demo for GitHub Pages (docs/index.html, docs/demo-data/)
 tests/                       automated tests
 docs/METHODS.md              method, validation and limits
 ```

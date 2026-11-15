@@ -69,8 +69,9 @@ def test_clusters_and_sensitivity(client):
     assert body["total_clusters"] >= body["shown"] > 0
     assert "not a confirmed fire" in body["note"]
     assert client.get("/api/clusters?date_from=2020-08-01&date_to=2020-08-05&eps_km=99").status_code == 400
-    rows = client.get("/api/sensitivity").json()["rows"]
-    assert {r["eps_km"] for r in rows} == {0.5, 1.0, 2.0, 5.0}
+    body = client.get("/api/sensitivity").json()
+    assert {r["eps_km"] for r in body["rows"]} == {0.5, 1.0, 2.0, 5.0}
+    assert body["sample_period"].startswith(body["sample_month"])
 
 
 def test_index_page_is_served(client):

@@ -138,18 +138,18 @@ The whole analysis repeated with other cell sizes. Stable results across sizes m
 
 ## Sensitivity of cluster counts to the clustering radius
 
-Busiest month in the selection (2020-09). Cluster counts change with the radius, which is why clusters are used for display only and not for the harmonised record.
+Month with the most detections (2020-09; detections from 2020-09-01 to 2020-09-30). Cluster counts change with the radius, which is why clusters are used for display only and not for the harmonised record.
 
 | Radius | Sensor | Detections | Clusters | Pixels per cluster |
 |---:|---|---:|---:|---:|
-| 0.5 km | MODIS | 4,311 | 4,252 | 1.01 |
-| 0.5 km | VIIRS | 36,332 | 9,011 | 4.03 |
-| 1 km | MODIS | 4,311 | 3,482 | 1.24 |
-| 1 km | VIIRS | 36,332 | 2,721 | 13.35 |
-| 2 km | MODIS | 4,311 | 903 | 4.77 |
-| 2 km | VIIRS | 36,332 | 1,461 | 24.87 |
-| 5 km | MODIS | 4,311 | 428 | 10.07 |
-| 5 km | VIIRS | 36,332 | 659 | 55.13 |
+| 0.5 km | MODIS | 18,544 | 18,070 | 1.03 |
+| 0.5 km | VIIRS | 181,404 | 49,537 | 3.66 |
+| 1 km | MODIS | 18,544 | 14,835 | 1.25 |
+| 1 km | VIIRS | 181,404 | 15,312 | 11.85 |
+| 2 km | MODIS | 18,544 | 4,286 | 4.33 |
+| 2 km | VIIRS | 181,404 | 8,365 | 21.69 |
+| 5 km | MODIS | 18,544 | 2,108 | 8.8 |
+| 5 km | VIIRS | 181,404 | 3,676 | 49.35 |
 
 ## Observing-system check
 

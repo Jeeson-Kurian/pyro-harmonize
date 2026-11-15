@@ -11969,63 +11969,64 @@
  ],
  "radius_sensitivity": {
   "sample_month": "2020-09",
-  "detections": 40643,
+  "sample_period": "2020-09-01 to 2020-09-30",
+  "detections": 199948,
   "rows": [
    {
     "eps_km": 0.5,
     "sensor": "MODIS",
-    "detections": 4311,
-    "clusters": 4252,
-    "pixels_per_cluster": 1.01
+    "detections": 18544,
+    "clusters": 18070,
+    "pixels_per_cluster": 1.03
    },
    {
     "eps_km": 0.5,
     "sensor": "VIIRS",
-    "detections": 36332,
-    "clusters": 9011,
-    "pixels_per_cluster": 4.03
+    "detections": 181404,
+    "clusters": 49537,
+    "pixels_per_cluster": 3.66
    },
    {
     "eps_km": 1.0,
     "sensor": "MODIS",
-    "detections": 4311,
-    "clusters": 3482,
-    "pixels_per_cluster": 1.24
+    "detections": 18544,
+    "clusters": 14835,
+    "pixels_per_cluster": 1.25
    },
    {
     "eps_km": 1.0,
     "sensor": "VIIRS",
-    "detections": 36332,
-    "clusters": 2721,
-    "pixels_per_cluster": 13.35
+    "detections": 181404,
+    "clusters": 15312,
+    "pixels_per_cluster": 11.85
    },
    {
     "eps_km": 2.0,
     "sensor": "MODIS",
-    "detections": 4311,
-    "clusters": 903,
-    "pixels_per_cluster": 4.77
+    "detections": 18544,
+    "clusters": 4286,
+    "pixels_per_cluster": 4.33
    },
    {
     "eps_km": 2.0,
     "sensor": "VIIRS",
-    "detections": 36332,
-    "clusters": 1461,
-    "pixels_per_cluster": 24.87
+    "detections": 181404,
+    "clusters": 8365,
+    "pixels_per_cluster": 21.69
    },
    {
     "eps_km": 5.0,
     "sensor": "MODIS",
-    "detections": 4311,
-    "clusters": 428,
-    "pixels_per_cluster": 10.07
+    "detections": 18544,
+    "clusters": 2108,
+    "pixels_per_cluster": 8.8
    },
    {
     "eps_km": 5.0,
     "sensor": "VIIRS",
-    "detections": 36332,
-    "clusters": 659,
-    "pixels_per_cluster": 55.13
+    "detections": 181404,
+    "clusters": 3676,
+    "pixels_per_cluster": 49.35
    }
   ]
  }
