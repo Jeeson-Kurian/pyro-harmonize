@@ -24,7 +24,8 @@ from dataclasses import replace
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from engine import __version__                                              # noqa: E402
-from engine.pipeline import AnalysisConfig, export_frame, load_dataset, run_analysis   # noqa: E402
+from engine.pipeline import (AnalysisConfig, export_frame, load_dataset,   # noqa: E402
+                             modis_switch_off_test, run_analysis)
 
 
 def _pct(v):
@@ -108,7 +109,34 @@ def _observing_section(check):
     return out
 
 
-def build_report(summary, sensitivity, radius, check=None) -> str:
+def _switch_off_section(so) -> list:
+    if not so:
+        return []
+    out = ["## MODIS switched off: does the record continue?", ""]
+    if not so.get("available"):
+        return out + [f"Not run: {so.get('reason')}", ""]
+    c, f = so["scores"]["count"], so["scores"]["frp"]
+    out += [f"Both MODIS instruments (Terra and Aqua) are removed from {so['cutoff']}. Every calibration is "
+            f"refitted on {so['calibration_period'][0]} to {so['calibration_period'][1]} only, and the record is "
+            f"continued from {' and '.join(so['viirs_platforms'])} VIIRS alone ({so['days_viirs_derived']:,} of "
+            f"{so['days_after_cutoff']:,} days). The result is compared with what Aqua MODIS really observed in "
+            f"{len(so['months'])} months, which the test never saw"
+            + (f" ({so['months_excluded']} month(s) with a gap in either series left out)" if so["months_excluded"] else "")
+            + ".", "",
+            "| | Total difference from real Aqua MODIS | Median monthly error | Rank correlation |",
+            "|---|---:|---:|---:|",
+            f"| Raw VIIRS hot spots (mean of the VIIRS satellites) | {_pct(so['raw_viirs_hotspot_bias_pct'])} | | |",
+            f"| Record continued from VIIRS, active cells | {_pct(c['total_bias_pct'])} | "
+            f"{_num(c['median_abs_pct_error'])} % | {_num(c['spearman_r'], 3)} |"]
+    if f.get("available"):
+        out.append(f"| Record continued from VIIRS, FRP | {_pct(f['total_bias_pct'])} | "
+                   f"{_num(f['median_abs_pct_error'])} % | {_num(f['spearman_r'], 3)} |")
+    if so.get("inside_90pct_band_pct") is not None:
+        out += ["", f"Real Aqua monthly values inside the stated 90 % band: {so['inside_90pct_band_pct']:.0f} % of months."]
+    return out + [""]
+
+
+def build_report(summary, sensitivity, radius, check=None, switch_off=None) -> str:
     s = summary
     out = ["# PyroHarmonize validation report" + (f": {s['label']}" if s.get("label") else ""), ""]
     if s["synthetic"]:
@@ -198,6 +226,7 @@ def build_report(summary, sensitivity, radius, check=None) -> str:
             out.append(f"| {r['eps_km']:g} km | {r['sensor']} | {r['detections']:,} | {r['clusters']:,} | {r['pixels_per_cluster']} |")
         out.append("")
 
+    out += _switch_off_section(switch_off)
     out += _observing_section(check)
     season = s["seasonality"]
     out += ["## Seasonality (observed, no cause assigned)", ""]
@@ -253,6 +282,15 @@ def readme_block(summary, report_path: str = "docs/case_study/REPORT.md") -> str
         rows += 1
     if not s["calibrations"]:
         lines.append("| (no second platform could be compared with Aqua MODIS in this selection) | | | | | | |")
+    so = s.get("modis_switch_off") or {}
+    if so.get("available"):
+        c = so["scores"]["count"]
+        f = so["scores"]["frp"]
+        lines += ["", f"MODIS switched off from {so['cutoff']} (calibration on earlier years only): raw VIIRS hot spots "
+                      f"{_pct(so['raw_viirs_hotspot_bias_pct'])}; record continued from VIIRS {_pct(c['total_bias_pct'])} "
+                      f"against what Aqua MODIS really observed, median monthly error {_num(c['median_abs_pct_error'])} %, "
+                      f"{so['inside_90pct_band_pct']:.0f} % of months inside the 90 % band"
+                      + (f"; FRP {_pct(f['total_bias_pct'])}." if f.get("available") else ".")]
     return "\n".join(lines)
 
 
@@ -349,12 +387,14 @@ def main(argv=None) -> int:
 
     os.makedirs(args.out, exist_ok=True)
     check = observing_system_check(analysis)
-    report = build_report(analysis.summary, sensitivity, radius, check)
+    switch_off = modis_switch_off_test(detections, manifest, analysis)
+    report = build_report(analysis.summary, sensitivity, radius, check, switch_off)
     with open(os.path.join(args.out, "REPORT.md"), "w", encoding="utf-8") as handle:
         handle.write(report)
     slim = {k: v for k, v in analysis.summary.items() if k != "calendar"}
     slim["cell_size_sensitivity"] = sensitivity
     slim["radius_sensitivity"] = radius
+    slim["modis_switch_off"] = {k: v for k, v in switch_off.items() if k != "calendar"}
     with open(os.path.join(args.out, "report.json"), "w", encoding="utf-8") as handle:
         json.dump(slim, handle, indent=1)
     label = "SYNTHETIC - not satellite data" if analysis.summary["synthetic"] else "NASA FIRMS"

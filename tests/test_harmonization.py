@@ -178,3 +178,28 @@ def test_map_handles_a_busy_window_without_refusing(analysis):
     assert MAX_MAP_DETECTIONS >= 300_000
     result = analysis.clusters("2008-01-01", "2023-12-31", 2.0)   # the whole simulated record
     assert "error" not in result and result["total_clusters"] >= result["shown"] > 0
+
+
+def test_modis_switched_off_record_continues_from_viirs_without_seeing_aqua(world, detections, analysis):
+    from engine.pipeline import modis_switch_off_test
+    result = modis_switch_off_test(detections, world["manifest"], analysis)
+    assert result["available"] and result["cutoff"] == "2022-01-01"
+    assert result["withheld_period"] == ["2022-01-01", "2023-12-31"]
+    # every day after the cut-off is VIIRS-derived: no MODIS value leaks into the continuation
+    assert result["days_viirs_derived"] == result["days_after_cutoff"] == 730
+    years = result["calendar"]["years"]
+    for row in (years.index(2022), years.index(2023)):
+        assert {v for v in result["calendar"]["source"][row] if v is not None} == {2}
+    # the calibrations behind it were fitted on months before the cut-off only
+    assert all(c["trained_on_months"] <= 14 * 12 for c in result["calibrations"].values())
+    count = result["scores"]["count"]
+    assert abs(count["total_bias_pct"]) < 10 and count["spearman_r"] > 0.9
+    assert result["raw_viirs_hotspot_bias_pct"] > 100          # raw counts would not continue the record
+    assert len(result["months"]) == len(result["aqua_observed_cells"]) == len(result["continued_cells"]) == 24
+
+
+def test_switch_off_needs_enough_years(world, detections):
+    from engine.pipeline import AnalysisConfig, modis_switch_off_test, run_analysis
+    short = run_analysis(detections, world["manifest"], AnalysisConfig(start="2021-01-01", end="2023-12-31"))
+    result = modis_switch_off_test(detections, world["manifest"], short)
+    assert result["available"] is False and "four calendar years" in result["reason"]

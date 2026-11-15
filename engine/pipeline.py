@@ -18,7 +18,7 @@ with a fixed priority, and the source of every day is kept:
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -28,7 +28,7 @@ from . import anomaly as anomaly_mod
 from . import calendar_generator as cal
 from .data_loader import load_firms_directory, quality_filter, standardize_firms
 from .gridding import add_keys, build_cell_table
-from .harmonizer import METHOD_LABELS, TargetCalibration, monthly_interval
+from .harmonizer import METHOD_LABELS, TargetCalibration, _score, monthly_interval
 from .matching import build_pairs, platform_coverage
 from .schema import FIRMS_SOURCES, PLATFORM_LABELS, PLATFORMS, REFERENCE_PLATFORM
 from .spatial_cluster import OverpassClusterer, radius_sensitivity
@@ -48,6 +48,10 @@ class AnalysisConfig:
     cell_km: float = 10.0
     drop_low_confidence: bool = True
     vegetation_only: bool = True
+    # Test scenario: treat MODIS (Terra and Aqua) as switched off from this local date.
+    # Its detections and coverage are removed, so calibration can only learn from earlier
+    # years and the record must continue from VIIRS alone. See modis_switch_off_test().
+    modis_off_from: Optional[str] = None
 
 
 def json_safe(obj: Any) -> Any:
@@ -86,7 +90,7 @@ def load_dataset(data_dir: Optional[str] = None, force_synthetic: bool = False
     data_dir = data_dir or os.environ.get("PYRO_DATA_DIR") or os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "firms")
     force_synthetic = force_synthetic or os.environ.get("PYRO_DEMO", "") == "1"
-    has_files = os.path.isdir(data_dir) and any(f.lower().endswith(".csv") for f in os.listdir(data_dir))
+    has_files = os.path.isdir(data_dir) and any(f.lower().endswith((".csv", ".csv.gz")) for f in os.listdir(data_dir))
     if has_files and not force_synthetic:
         detections, provenance = load_firms_directory(data_dir)
         info = {"mode": "firms", "data_dir": data_dir, "files": provenance["files"]}
@@ -251,7 +255,13 @@ def run_analysis(detections: pd.DataFrame, manifest: Optional[Dict[str, Any]] = 
         keyed = keyed[(keyed["local_date"] >= dates[0]) & (keyed["local_date"] <= dates[-1])].reset_index(drop=True)
 
     # 3. coverage and common units ----------------------------------------------------
+    modis = [p for p, info in PLATFORMS.items() if info["sensor"] == "MODIS"]
+    if config.modis_off_from and len(keyed):
+        off = pd.Timestamp(config.modis_off_from)
+        keyed = keyed[~(keyed["platform"].isin(modis) & (keyed["local_date"] >= off))].reset_index(drop=True)
     coverage = platform_coverage(dates, keyed, manifest)
+    if config.modis_off_from:
+        coverage.loc[coverage.index >= pd.Timestamp(config.modis_off_from), modis] = False
     coverage_basis = ("download manifest" if manifest and manifest.get("sources")
                       else "assumed: between first and last detection in each file")
     cells = build_cell_table(keyed)
@@ -486,6 +496,92 @@ def run_analysis(detections: pd.DataFrame, manifest: Optional[Dict[str, Any]] = 
     result.calibrations = calibrations
     result.coverage = coverage
     return result
+
+
+# ------------------------------------------------------------------ MODIS switched off
+
+def default_switch_off_date(analysis: Analysis) -> Optional[str]:
+    """1 January of the second-to-last year, so the last two calendar years are withheld.
+    Needs at least four calendar years, so that three or more remain for calibration."""
+    period = analysis.summary.get("period") or {}
+    if analysis.summary.get("empty") or not period.get("start"):
+        return None
+    first, last = pd.Timestamp(period["start"]).year, pd.Timestamp(period["end"]).year
+    return f"{last - 1}-01-01" if last - first >= 3 else None
+
+
+def modis_switch_off_test(detections: pd.DataFrame, manifest: Optional[Dict[str, Any]],
+                          full: Analysis, cutoff: Optional[str] = None) -> Dict[str, Any]:
+    """
+    What happens to the record when MODIS ends? Both MODIS instruments are removed from
+    `cutoff` on, every calibration is refitted on the earlier years only, and the record
+    is continued from VIIRS alone. The continuation is then compared with what Aqua MODIS
+    really observed after `cutoff`, which the scenario never saw.
+    Months are compared only where every day has both the real Aqua value and a
+    continued value, so a gap in either can never look like agreement.
+    """
+    cutoff = cutoff or default_switch_off_date(full)
+    if cutoff is None:
+        return json_safe({"available": False,
+                          "reason": "The selection needs at least four calendar years: the last two are "
+                                    "withheld and the rest are used for calibration."})
+    scenario = run_analysis(detections, manifest, replace(full.config, modis_off_from=cutoff))
+    if scenario.summary.get("empty") or "harmonized_cells" not in scenario.daily:
+        return json_safe({"available": False, "cutoff": cutoff, "reason": "No data in the selection."})
+    after = full.daily.index >= pd.Timestamp(cutoff)
+    truth, cont = full.daily.loc[after], scenario.daily.loc[after]
+    viirs = [p for p, info in PLATFORMS.items() if info["sensor"] == "VIIRS" and f"{p}_hotspots" in truth
+             and truth[f"{p}_hotspots"].notna().any()]
+    usable = (truth["Aqua_cells"].notna() & cont["harmonized_cells"].notna()
+              & (cont["source"] == 2)).values
+    if not usable.any():
+        return json_safe({"available": False, "cutoff": cutoff,
+                          "reason": "After the cut-off no day has both real Aqua data and a VIIRS-derived value."})
+    month = pd.DatetimeIndex(truth.index).to_period("M")
+    complete = pd.Series(usable, index=month).groupby(level=0).all()
+    months = complete.index[complete.values]
+    keep = np.isin(month, months)
+
+    def monthly(frame: pd.DataFrame, column: str) -> np.ndarray:
+        return frame.loc[keep, column].groupby(month[keep]).sum(min_count=1).reindex(months).values
+
+    obs_cells, cont_cells = monthly(truth, "Aqua_cells"), monthly(cont, "harmonized_cells")
+    obs_frp, cont_frp = monthly(truth, "Aqua_frp_mw"), monthly(cont, "harmonized_frp_mw")
+    sm = scenario.monthly.reindex(months)
+    low, high = sm["cells_low"].values, sm["cells_high"].values
+    raw_viirs = (truth.loc[keep, [f"{p}_hotspots" for p in viirs]].mean(axis=1)
+                 .groupby(month[keep]).sum().reindex(months).values) if viirs else None
+    raw_aqua = monthly(truth, "Aqua_hotspots")
+    count = _score(cont_cells, obs_cells, "count")
+    frp_ok = np.isfinite(obs_frp).all() and np.isfinite(cont_frp).all()
+    inside = (obs_cells >= low) & (obs_cells <= high)
+    calibs = {t: {"count_method": c.count_method, "frp_method": c.frp_method,
+                  "trained_on_months": c.summary.get("overlap_months")}
+              for t, c in scenario.calibrations.items() if c.status == "calibrated"}
+    first = pd.Timestamp(full.summary["period"]["start"]).strftime("%Y-%m-%d")
+    return json_safe({
+        "available": True,
+        "cutoff": cutoff,
+        "calibration_period": [first, (pd.Timestamp(cutoff) - pd.Timedelta(days=1)).strftime("%Y-%m-%d")],
+        "withheld_period": [cutoff, pd.Timestamp(full.summary["period"]["end"]).strftime("%Y-%m-%d")],
+        "months": [str(m) for m in months],
+        "months_excluded": int((~complete.values).sum()),
+        "aqua_observed_cells": np.round(obs_cells, 1),
+        "continued_cells": np.round(cont_cells, 1),
+        "continued_cells_low": np.round(low, 1),
+        "continued_cells_high": np.round(high, 1),
+        "aqua_observed_frp_mw": np.round(obs_frp, 1),
+        "continued_frp_mw": np.round(cont_frp, 1),
+        "scores": {"count": count, "frp": _score(cont_frp, obs_frp, "frp") if frp_ok else {"available": False}},
+        "raw_viirs_hotspot_bias_pct": (round(float(100.0 * (raw_viirs.sum() - raw_aqua.sum()) / raw_aqua.sum()), 1)
+                                       if raw_viirs is not None and raw_aqua.sum() > 0 else None),
+        "inside_90pct_band_pct": round(float(100.0 * inside.mean()), 1) if np.isfinite(low).all() else None,
+        "days_viirs_derived": int((scenario.daily.loc[after, "source"] == 2).sum()),
+        "days_after_cutoff": int(after.sum()),
+        "calibrations": calibs,
+        "viirs_platforms": viirs,
+        "calendar": {k: scenario.summary["calendar"][k] for k in ("years", "source", "harmonized_cells", "source_labels")},
+    })
 
 
 # ----------------------------------------------------------------------------- exports

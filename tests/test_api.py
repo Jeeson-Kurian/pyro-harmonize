@@ -74,6 +74,12 @@ def test_clusters_and_sensitivity(client):
     assert body["sample_period"].startswith(body["sample_month"])
 
 
+def test_switch_off_endpoint(client):
+    body = client.get("/api/switch_off").json()
+    assert body["available"] is True and body["days_viirs_derived"] == body["days_after_cutoff"]
+    assert client.get("/api/switch_off?start=2024-01-01&end=2024-12-31").json()["available"] is False
+
+
 def test_index_page_is_served(client):
     page = client.get("/")
     assert page.status_code == 200 and "PyroHarmonize" in page.text

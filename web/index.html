@@ -321,12 +321,12 @@ function heatmap(el, o) {
 }
 
 /* ---- application ------------------------------------------------------------------------- */
-let META = null, A = null, calView = 'harmonized_cells', calTarget = null, map = null, mapLayer = null, mapBox = null;
+let META = null, A = null, QUERY = '', calView = 'harmonized_cells', calTarget = null, map = null, mapLayer = null, mapBox = null;
 
 const STATIC = window.PYRO_STATIC === true;   // set by scripts/build_static_site.py
 const REPO = 'https://github.com/Jeeson-Kurian/pyro-harmonize';
 function staticUrl(url) {
-  for (const name of ['meta', 'analysis', 'clusters', 'sensitivity'])
+  for (const name of ['meta', 'analysis', 'clusters', 'sensitivity', 'switch_off'])
     if (url.startsWith('/api/' + name)) return 'demo-data/' + name + '.json';
   return url;
 }
@@ -379,6 +379,7 @@ async function load() {
     $('dlDet').href = REPO + '/tree/main/data/firms'; $('dlDet').removeAttribute('download'); $('dlDet').textContent = 'Detections (NASA FIRMS files on GitHub)';
   } else
     ['Daily', 'Monthly', 'Det'].forEach((k, i) => $('dl' + k).href = '/api/export/' + ['daily', 'monthly', 'detections'][i] + '.csv' + (q ? '?' + q : ''));
+  QUERY = q;
   try { A = await getJSON('/api/analysis' + (q ? '?' + q : '')); }
   catch (e) { $('content').innerHTML = '<div class="card"><div class="warn">' + esc(e.message) + '</div></div>'; return; }
   render();
@@ -398,6 +399,8 @@ function render() {
     '<section class="card"><h2>Burning activity calendar</h2><p class="sub" id="calSub"></p><div class="tabs" id="calTabs"></div><div class="chart" id="calendar"></div><p class="note" id="calNote"></p></section>' +
     '<section class="card"><h2>Does the harmonisation work? Held-out test against Aqua MODIS</h2><p class="sub">Every method is fitted on some years and scored on years it has not seen. ' +
       'The reference is what Aqua MODIS actually reported in those months. A method is only used if it wins this test.</p><div id="validation"></div></section>' +
+    '<section class="card"><h2>MODIS switched off: does the record continue?</h2><p class="sub">Both MODIS instruments are near the end of their missions. Here they are switched off for the last two years of the record: ' +
+      'every calibration is refitted on the earlier years only, the record continues from VIIRS alone, and the result is compared with what Aqua MODIS really observed, which the test never saw.</p><div id="switchOff"><div class="loading">Running the test…</div></div></section>' +
     '<div class="grid2"><section class="card"><h2>Is this month unusual?</h2><p class="sub">Harmonised activity in a month compared with the same calendar month in the other years of the record.</p><div id="anomaly"></div></section>' +
       '<section class="card"><h2>Critical periods of the year</h2><p class="sub">Typical weekly activity across all years with full coverage.</p><div id="critical"></div></section></div>' +
     '<div class="grid2"><section class="card"><h2>Fire season timing</h2><p class="sub">Days by which 10 %, 50 % and 90 % of a fire year\'s harmonised active cells had accumulated.</p><div id="season"></div></section>' +
@@ -405,7 +408,7 @@ function render() {
     '<section class="card"><h2>Hot-spot clusters on the map</h2><p class="sub">Adjacent fire pixels from one platform in one overpass, grouped by great-circle distance. A cluster is not a confirmed fire.</p><div id="mapBox"></div></section>' +
     '<section class="card"><h2>Data, coverage and quality control</h2><div id="prov"></div></section>' +
     '<section class="card"><h2>Method and limits</h2><div id="methods"></div></section></div>';
-  renderTiles(); renderCalendar(); renderValidation(); renderAnomaly(); renderCritical(); renderSeason(); renderSensors(); renderMap(); renderProvenance(); renderMethods();
+  renderTiles(); renderCalendar(); renderValidation(); renderSwitchOff(); renderAnomaly(); renderCritical(); renderSeason(); renderSensors(); renderMap(); renderProvenance(); renderMethods();
 }
 
 function renderBanner() {
@@ -486,6 +489,38 @@ function renderValidation() {
     series: [{name: 'Aqua MODIS observed', color: C.s1, y: m.observed_reference_cells},
              {name: platformLabel(calTarget) + ' on a common grid, uncalibrated', color: C.s2, y: m.gridded_cells, dash: true},
              {name: platformLabel(calTarget) + ' harmonised (held-out prediction)', color: C.s3, y: m.selected_count}]});
+}
+async function renderSwitchOff() {
+  const box = $('switchOff'), want = A;
+  let S;
+  try { S = await getJSON('/api/switch_off' + (QUERY ? '?' + QUERY : '')); }
+  catch (e) { if (A === want) box.innerHTML = '<div class="warn">' + esc(e.message) + '</div>'; return; }
+  if (A !== want) return;                       // a newer selection has been loaded meanwhile
+  if (!S.available) { box.innerHTML = '<div class="warn">' + esc(S.reason) + '</div>'; return; }
+  const c = S.scores.count, f = S.scores.frp, n = S.months.length;
+  const inside = S.aqua_observed_cells.filter((v, i) => v >= S.continued_cells_low[i] && v <= S.continued_cells_high[i]).length;
+  const vi = S.viirs_platforms.map(platformLabel).join(' and ');
+  let h = '<div class="tiles" style="margin-bottom:12px">' +
+    '<div class="tile"><div class="k">Raw VIIRS hot spots vs Aqua MODIS</div><div class="v">' + pct(S.raw_viirs_hotspot_bias_pct) + '</div><div class="d">what a plain switch of sensor would do to the record</div></div>' +
+    '<div class="tile"><div class="k">Record continued from VIIRS</div><div class="v">' + pct(c.total_bias_pct) + '</div><div class="d">total difference from what Aqua MODIS really observed</div></div>' +
+    '<div class="tile"><div class="k">Typical monthly error</div><div class="v">' + fmt(c.median_abs_pct_error, 1) + ' %</div><div class="d">median absolute error over ' + n + ' months · rank corr. ' + fmt(c.spearman_r, 2) + '</div></div>' +
+    '<div class="tile"><div class="k">Inside the 90 % band</div><div class="v">' + inside + ' of ' + n + '</div><div class="d">months where Aqua\'s real value lies inside the stated uncertainty</div></div></div>' +
+    '<div class="chart" id="soChart"></div>' +
+    '<h3>Where each day of this record comes from</h3><div class="chart" id="soCal"></div>' +
+    '<p class="note">MODIS removed from ' + esc(S.cutoff) + '. Calibrated on ' + esc(S.calibration_period[0]) + ' to ' + esc(S.calibration_period[1]) + ' only; ' +
+    fmt(S.days_viirs_derived, 0) + ' of ' + fmt(S.days_after_cutoff, 0) + ' days after the cut-off come from ' + esc(vi) + ' (averaged, never added). ' +
+    (f.available ? 'Fire radiative power continued the same way: ' + pct(f.total_bias_pct) + ' in total, ' + fmt(f.median_abs_pct_error, 1) + ' % typical monthly error. FRP is less certain than the cell counts. ' : '') +
+    (S.months_excluded ? S.months_excluded + ' month(s) with a gap in either series are left out. ' : '') + '</p>';
+  box.innerHTML = h;
+  catChart($('soChart'), {categories: S.months, height: 250, yTitle: 'active cells per month', labelWidth: 64, aria: 'MODIS switched off: continued record vs real Aqua MODIS',
+    series: [{name: '90 % band of the continued record', type: 'band', color: C.s3, y: S.continued_cells_low, y1: S.continued_cells_high},
+             {name: 'Aqua MODIS, really observed (hidden from the test)', color: C.s1, y: S.aqua_observed_cells, markers: true},
+             {name: 'Record continued from VIIRS only', color: C.s3, y: S.continued_cells, markers: true}],
+    tooltip: i => [['Aqua MODIS observed', fmt(S.aqua_observed_cells[i])], ['Continued from VIIRS', fmt(S.continued_cells[i])],
+                   ['90 % band', fmt(S.continued_cells_low[i]) + ' – ' + fmt(S.continued_cells_high[i])]]});
+  const cal = S.calendar;
+  heatmap($('soCal'), {years: cal.years, matrix: cal.source, categorical: {1: C.s1, 2: C.s3, 3: C.s2}, labels: cal.source_labels,
+    aria: 'Source of each day when MODIS is switched off', tip: (r, d) => [['Based on', cal.source_labels[cal.source[r][d] || 0]]]});
 }
 function platformLabel(p) { const row = (A.platforms || []).find(x => x.platform === p); return row ? row.label : p; }
 

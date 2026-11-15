@@ -151,6 +151,18 @@ Month with the most detections (2024-09; detections from 2024-09-01 to 2024-09-3
 | 5 km | MODIS | 2,529 | 394 | 6.42 |
 | 5 km | VIIRS | 20,587 | 924 | 22.28 |
 
+## MODIS switched off: does the record continue?
+
+Both MODIS instruments (Terra and Aqua) are removed from 2023-01-01. Every calibration is refitted on 2018-04-01 to 2022-12-31 only, and the record is continued from SNPP and NOAA20 VIIRS alone (731 of 731 days). The result is compared with what Aqua MODIS really observed in 24 months, which the test never saw.
+
+| | Total difference from real Aqua MODIS | Median monthly error | Rank correlation |
+|---|---:|---:|---:|
+| Raw VIIRS hot spots (mean of the VIIRS satellites) | +628.4 % | | |
+| Record continued from VIIRS, active cells | +2.9 % | 14.5 % | 0.925 |
+| Record continued from VIIRS, FRP | -17.1 % | 88.4 % | 0.949 |
+
+Real Aqua monthly values inside the stated 90 % band: 92 % of months.
+
 ## Observing-system check
 
 Median local solar time of daytime detections, by platform and year. A change over the years means the satellite's orbit drifted, so it observes fires at a different time of day.

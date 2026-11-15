@@ -18,7 +18,8 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 
-from engine.pipeline import AnalysisConfig, dataset_meta, export_frame, load_dataset, run_analysis  # noqa: E402
+from engine.pipeline import (AnalysisConfig, dataset_meta, export_frame, load_dataset,  # noqa: E402
+                             modis_switch_off_test, run_analysis)
 
 
 def _write_json(path: str, data) -> None:
@@ -45,6 +46,7 @@ def build(data_dir: str | None, out_dir: str) -> dict:
     end = f"{busiest}-10"
     _write_json(os.path.join(data_out, "clusters.json"), analysis.clusters(start, end, 2.0))
     _write_json(os.path.join(data_out, "sensitivity.json"), analysis.radius_sensitivity())
+    _write_json(os.path.join(data_out, "switch_off.json"), modis_switch_off_test(detections, manifest, analysis))
     for kind in ("daily", "monthly"):
         frame = export_frame(analysis, kind)
         frame.insert(0, "data_mode", "NASA FIRMS")

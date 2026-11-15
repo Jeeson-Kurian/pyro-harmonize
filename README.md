@@ -31,6 +31,7 @@ NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS H
 |---|---|
 | Real-data pipeline (download, quality control, harmonisation, validation, web app) | **Implemented and covered by automated tests** |
 | Real NASA FIRMS case study | **Done for two regions, April 2018 to December 2024:** northern California (908,032 detections after quality control) and Portugal (93,811). On months the model never saw, harmonisation cuts the difference between VIIRS and Aqua MODIS from about +500 % to +780 % (raw hot spots) to under 2 % in both regions. Details: [Real-data result](#real-data-result), [docs/case_study/REPORT.md](docs/case_study/REPORT.md) and [docs/case_study_portugal/REPORT.md](docs/case_study_portugal/REPORT.md). |
+| MODIS switched off (simulated end of mission) | **Tested in both regions.** MODIS removed for 2023 and 2024, calibration fitted on the earlier years only, record continued from VIIRS alone: −6.0 % (California) and +2.9 % (Portugal) against what Aqua MODIS really observed, where raw VIIRS hot spots would give +523 % and +628 %. Shown live in the online demo. Details: [Real-data result](#real-data-result). |
 | What it does not show yet | That the method works in every fire regime. Each validated region is listed under [Real-data result](#real-data-result), fitted and tested on its own data. |
 
 ## The problem
@@ -137,6 +138,8 @@ Settings: `PYRO_DATA_DIR` (other data folder), `PYRO_DEMO=1` (force the syntheti
 | Suomi-NPP VIIRS (81 months) | +764.0 % | +210.7 % | +1.8 % | 13.2 % | -8.5 % | Common grid + detection model with time of year |
 | NOAA-20 VIIRS (81 months) | +781.2 % | +222.0 % | +1.6 % | 14.1 % | -3.5 % | Common grid + detection model with time of year |
 
+MODIS switched off from 2023-01-01 (calibration on earlier years only): raw VIIRS hot spots +523.0 %; record continued from VIIRS -6.0 % against what Aqua MODIS really observed, median monthly error 13.4 %, 96 % of months inside the 90 % band; FRP -37.6 %.
+
 **Portugal** (west, south, east, north: -9.6, 36.9, -6.1, 42.2). Period: 2018-04-01 to 2024-12-31. Data: NASA FIRMS, 93,811 detections after quality control. Full report: [docs/case_study_portugal/REPORT.md](docs/case_study_portugal/REPORT.md).
 
 | Platform compared with Aqua MODIS (held-out months) | Raw hot spots | Common grid only | After harmonisation | Median monthly error | Forward-in-time test | Method used |
@@ -144,6 +147,8 @@ Settings: `PYRO_DATA_DIR` (other data folder), `PYRO_DEMO=1` (force the syntheti
 | Terra MODIS (81 months) | +0.6 % | -0.8 % | -0.8 % | 20.6 % | -2.4 % | Common grid only (no calibration) |
 | Suomi-NPP VIIRS (81 months) | +500.4 % | +249.2 % | +0.3 % | 14.7 % | +5.2 % | Common grid + detection model with time of year |
 | NOAA-20 VIIRS (81 months) | +514.0 % | +271.5 % | +0.1 % | 14.3 % | +0.6 % | Common grid + detection model with time of year |
+
+MODIS switched off from 2023-01-01 (calibration on earlier years only): raw VIIRS hot spots +628.4 %; record continued from VIIRS +2.9 % against what Aqua MODIS really observed, median monthly error 14.5 %, 92 % of months inside the 90 % band; FRP -17.1 %.
 
 Percentages are total differences from what Aqua MODIS reported in months that were not used for fitting. Each region was fitted and tested on its own data.
 <!-- CASE_STUDY:END -->

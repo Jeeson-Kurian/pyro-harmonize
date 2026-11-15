@@ -27,7 +27,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from engine import __version__
-from engine.pipeline import Analysis, AnalysisConfig, dataset_meta, export_frame, load_dataset, run_analysis
+from engine.pipeline import (Analysis, AnalysisConfig, dataset_meta, export_frame, load_dataset,
+                             modis_switch_off_test, run_analysis)
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CACHE_SIZE = 8
@@ -41,6 +42,7 @@ app = FastAPI(
 _lock = threading.Lock()
 _dataset: Optional[Tuple[Any, Any, Dict[str, Any]]] = None
 _cache: "OrderedDict[AnalysisConfig, Analysis]" = OrderedDict()
+_switch_off: "OrderedDict[AnalysisConfig, Dict[str, Any]]" = OrderedDict()
 
 
 def get_dataset():
@@ -136,6 +138,25 @@ def sensitivity(west: Optional[float] = None, south: Optional[float] = None,
     """How cluster counts depend on the clustering radius (0.5, 1, 2, 5 km)."""
     config = make_config(west, south, east, north, start, end, cell_km)
     return JSONResponse(content=get_analysis(config).radius_sensitivity())
+
+
+@app.get("/api/switch_off")
+def switch_off(west: Optional[float] = None, south: Optional[float] = None,
+               east: Optional[float] = None, north: Optional[float] = None,
+               start: Optional[str] = None, end: Optional[str] = None, cell_km: float = 10.0):
+    """MODIS switched off: the last two years of the selection are continued from VIIRS alone
+    and compared with what Aqua MODIS really observed."""
+    config = make_config(west, south, east, north, start, end, cell_km)
+    with _lock:
+        if config in _switch_off:
+            return JSONResponse(content=_switch_off[config])
+    detections, manifest, _ = get_dataset()
+    result = modis_switch_off_test(detections, manifest, get_analysis(config))
+    with _lock:
+        _switch_off[config] = result
+        while len(_switch_off) > CACHE_SIZE:
+            _switch_off.popitem(last=False)
+    return JSONResponse(content=result)
 
 
 def _csv_chunks(frame, mode_label: str) -> Iterator[str]:
