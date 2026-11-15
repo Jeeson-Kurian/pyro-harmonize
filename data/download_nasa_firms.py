@@ -75,22 +75,40 @@ def merge_intervals(chunks: List[Tuple[date, int]]) -> List[List[str]]:
     return [[a.isoformat(), b.isoformat()] for a, b in intervals]
 
 
+class FirmsLimitError(FirmsError):
+    """The MAP_KEY transaction limit (5000 per 10 minutes) is exhausted for now."""
+
+
+def _is_limit_message(text: str) -> bool:
+    lowered = (text or "").lower()
+    return "limit" in lowered or "exceed" in lowered or "too many" in lowered
+
+
 def _get_text(session, url: str, retries: int, backoff: float, timeout: int = 90) -> str:
-    """GET with retries. Error text never includes the URL, because the URL holds the key."""
+    """
+    GET with retries. Error text never includes the URL, because the URL holds the key.
+    FIRMS answers a used-up transaction limit with HTTP 400 or 429 and a short message;
+    that case raises FirmsLimitError so the caller can wait and retry.
+    """
     problem = "no attempt made"
     for attempt in range(retries + 1):
         try:
             response = session.get(url, timeout=timeout)
             if response.status_code == 200:
                 return response.text
-            problem = f"HTTP {response.status_code}"
+            message = " ".join(str(getattr(response, "text", "") or "").split())[:160]
+            if response.status_code == 429 or _is_limit_message(message):
+                raise FirmsLimitError(f"HTTP {response.status_code}: {message or 'transaction limit'}")
+            problem = f"HTTP {response.status_code}" + (f": {message}" if message else "")
             if response.status_code in (400, 401, 403, 404):
                 break
+        except FirmsLimitError:
+            raise
         except requests.RequestException as exc:
             problem = type(exc).__name__
         if attempt < retries:
             time.sleep(backoff * (2 ** attempt))
-    raise FirmsError(f"request failed after {retries + 1} attempt(s): {problem}")
+    raise FirmsError(f"request failed: {problem}")
 
 
 def parse_firms_csv(text: str) -> pd.DataFrame:
@@ -109,19 +127,19 @@ def parse_firms_csv(text: str) -> pd.DataFrame:
 
 def _fetch_csv_text(session, url: str, retries: int, backoff: float, limit_wait: float, log) -> str:
     """
-    Fetch one chunk and make sure it is CSV before it is cached. If FIRMS reports
-    that the MAP_KEY transaction limit is exceeded (it resets within 10 minutes),
-    wait and try again instead of recording the chunk as failed.
+    Fetch one chunk and make sure it is CSV before it is cached. If the MAP_KEY
+    transaction limit is used up (it resets within 10 minutes), wait and try the
+    same chunk again instead of recording it as failed.
     """
-    for wait_round in range(12):
-        text = _get_text(session, url, retries, backoff)
+    for wait_round in range(15):
         try:
+            text = _get_text(session, url, retries, backoff)
             parse_firms_csv(text)
             return text
         except FirmsError as exc:
-            lowered = str(exc).lower()
-            if ("transaction" in lowered or "limit" in lowered) and wait_round < 11:
-                log(f"  FIRMS transaction limit reached; waiting {limit_wait:.0f} s")
+            limited = isinstance(exc, FirmsLimitError) or _is_limit_message(str(exc))
+            if limited and wait_round < 14:
+                log(f"  FIRMS transaction limit reached ({exc}); waiting {limit_wait:.0f} s, then continuing")
                 time.sleep(limit_wait)
                 continue
             raise
@@ -202,6 +220,7 @@ def download(bbox: Tuple[float, float, float, float], start: date, end: date,
             if i % 50 == 0:
                 log(f"  {i}/{len(chunks)} done")
         entry["coverage"] = merge_intervals(ok_chunks)
+        frames = [f for f in frames if len(f)]
         table = pd.concat(frames, ignore_index=True).drop_duplicates() if frames else pd.DataFrame()
         if len(table):
             table.to_csv(os.path.join(out_dir, f"{source}.csv"), index=False)

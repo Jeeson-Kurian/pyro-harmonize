@@ -1,0 +1,62 @@
+{
+  "synthetic": false,
+  "provider": "NASA FIRMS (Fire Information for Resource Management System), LANCE / EOSDIS",
+  "api": "https://firms.modaps.eosdis.nasa.gov/api/area/csv/[MAP_KEY]/[SOURCE]/-124,36,-119,41/[DAY_RANGE]/[DATE]",
+  "bbox": [
+    -124.0,
+    36.0,
+    -119.0,
+    41.0
+  ],
+  "requested": {
+    "start": "2018-04-01",
+    "end": "2024-12-31"
+  },
+  "chunk_days": 5,
+  "retrieved_utc": "2026-11-15T00:16:28Z",
+  "sources": {
+    "MODIS_SP": {
+      "available_in_firms": [
+        "2000-11-01",
+        "2026-08-31"
+      ],
+      "coverage": [
+        [
+          "2018-04-01",
+          "2024-12-31"
+        ]
+      ],
+      "failed_chunks": [],
+      "rows": 103807
+    },
+    "VIIRS_SNPP_SP": {
+      "available_in_firms": [
+        "2012-01-20",
+        "2026-07-31"
+      ],
+      "coverage": [
+        [
+          "2018-04-01",
+          "2024-12-31"
+        ]
+      ],
+      "failed_chunks": [],
+      "rows": 434309
+    },
+    "VIIRS_NOAA20_SP": {
+      "available_in_firms": [
+        "2018-04-01",
+        "2026-07-31"
+      ],
+      "coverage": [
+        [
+          "2018-04-01",
+          "2024-12-31"
+        ]
+      ],
+      "failed_chunks": [],
+      "rows": 444427
+    }
+  },
+  "platform_gaps": {}
+}
