@@ -2,12 +2,26 @@
 
 **A burning activity calendar that puts MODIS and VIIRS active-fire records on one scale, and shows how well that works.**
 
+<p align="center">
+  <a href="https://jeeson-kurian.github.io/pyro-harmonize/"><img src="https://img.shields.io/badge/%E2%96%B6%20LIVE%20DEMO-Open%20the%20dashboard-E8590C?style=for-the-badge" alt="Live demo: open the dashboard" height="40"></a>
+</p>
+
+<p align="center">
+  <b>Live demo: <a href="https://jeeson-kurian.github.io/pyro-harmonize/">jeeson-kurian.github.io/pyro-harmonize</a></b><br>
+  Opens in any browser, nothing to install. Real NASA FIRMS data, northern California, April 2018 to December 2024.
+</p>
+
+<p align="center">
+  <a href="https://jeeson-kurian.github.io/pyro-harmonize/"><img src="docs/img/demo_preview.png" width="860" alt="PyroHarmonize dashboard: burning activity calendar and held-out test of VIIRS against Aqua MODIS"></a><br>
+  <sub>Click the picture to open the live dashboard.</sub>
+</p>
+
 NASA Space Apps Challenge 2026 · challenge: *Harmonization of MODIS and VIIRS Hot Spots* · [challenge page](https://www.spaceappschallenge.org/2026/challenges/modis-and-viirs-hot-spots/)
 
 [![tests](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml/badge.svg)](https://github.com/Jeeson-Kurian/pyro-harmonize/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Online demo:** <https://jeeson-kurian.github.io/pyro-harmonize/> (the full analysis of the northern California NASA FIRMS data, computed in advance; to choose any area and period, run the app as described in [Quick start](#quick-start)).
+**Live demo:** <https://jeeson-kurian.github.io/pyro-harmonize/> shows the full analysis of the northern California NASA FIRMS data, computed in advance. To choose any area and period, run the app as described in [Quick start](#quick-start).
 
 ---
 
