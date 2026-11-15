@@ -202,7 +202,7 @@ More in [docs/METHODS.md](docs/METHODS.md), section 11.
 
 ## Use of AI
 
-Parts of the code, tests and documentation in this repository were written with the assistance of an AI model (Claude, by Anthropic). No AI-generated images, video or audio are used. The data are NASA FIRMS data, or simulated data that are labelled as synthetic wherever they appear.
+Parts of the code, tests and documentation in this repository were written with the assistance of an AI model (Claude, by Anthropic). No AI-generated images, video or audio are used: every chart, map and screenshot is drawn by this software from NASA FIRMS data. The data are NASA FIRMS data, or simulated data that are labelled as synthetic wherever they appear.
 
 ## Project layout
 
@@ -222,6 +222,7 @@ data/download_nasa_firms.py  FIRMS downloader
 scripts/run_case_study.py    reproducible validation report
 scripts/make_submission.py   download + report + README result in one command
 scripts/build_static_site.py online demo for GitHub Pages (docs/index.html, docs/demo-data/)
+scripts/merge_firms.py       join downloads of one area (e.g. an earlier period)
 tests/                       automated tests
 docs/METHODS.md              method, validation and limits
 ```

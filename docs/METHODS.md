@@ -179,6 +179,19 @@ error on the square-root scale for counts, log scale for FRP). It is an empirica
 band from held-out months of the same area, it needs at least 12 such months, and
 it is not a formal confidence interval.
 
+**MODIS switched off (end-of-mission test, `modis_switch_off_test`).** The
+situation the record will face is MODIS ending while VIIRS continues. The test
+recreates it: from 1 January of the second-to-last year of the selection, every
+Terra and Aqua detection is removed and both platforms are marked as not
+delivering data. Every calibration is then refitted on the earlier years only, and
+the record continues from VIIRS alone. The continuation is compared with what Aqua
+MODIS really observed in those months, which the test never saw. A month is
+compared only if every day has both the real Aqua value and a VIIRS-derived value.
+Reported: total difference, median monthly error, rank correlation, the share of
+months whose real Aqua value lies inside the stated 90 % band, and, for contrast,
+the difference that raw VIIRS hot-spot counts would give. The test needs at least
+four calendar years in the selection.
+
 ## 9. Calendar, seasonality, anomalies
 
 - **Calendar.** Year x 366 days. Day 366 exists only in leap years.
