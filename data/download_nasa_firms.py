@@ -12,8 +12,8 @@ with --sources for dates that standard processing has not reached yet.
 What the script guarantees
 - Area requests use the documented endpoint
       /api/area/csv/[MAP_KEY]/[SOURCE]/[west,south,east,north]/[DAY_RANGE]/[DATE]
-  The FIRMS page documents DAY_RANGE as 1..10. Requests are made in chunks of
-  5 days by default (--chunk-days), which stays inside the limit with margin.
+  FIRMS accepts DAY_RANGE 1..5 for these requests (it answers "Invalid day range.
+  Expects [1..5]" above that). Requests are made in chunks of 5 days by default.
 - Every chunk is cached on disk, so an interrupted run resumes where it stopped.
 - Requests are retried with exponential back-off.
 - Each source is clipped to the dates FIRMS says it has (/api/data_availability).
@@ -41,7 +41,7 @@ API_ROOT = "https://firms.modaps.eosdis.nasa.gov/api"
 DEFAULT_SOURCES = ["MODIS_SP", "VIIRS_SNPP_SP", "VIIRS_NOAA20_SP", "VIIRS_NOAA21_SP"]
 VALID_SOURCES = ["MODIS_SP", "MODIS_NRT", "VIIRS_SNPP_SP", "VIIRS_SNPP_NRT",
                  "VIIRS_NOAA20_SP", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_SP", "VIIRS_NOAA21_NRT"]
-MAX_DAY_RANGE = 10
+MAX_DAY_RANGE = 5        # FIRMS answers "Invalid day range. Expects [1..5]" above this (checked 2026-11-15)
 
 
 class FirmsError(RuntimeError):
@@ -269,7 +269,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--sources", default=",".join(DEFAULT_SOURCES),
                         help=f"comma-separated FIRMS sources (default: {','.join(DEFAULT_SOURCES)})")
     parser.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "firms"))
-    parser.add_argument("--chunk-days", type=int, default=5, help="days per request, 1-10 (default 5)")
+    parser.add_argument("--chunk-days", type=int, default=5, help="days per request, 1-5 (default 5)")
     parser.add_argument("--gzip", action="store_true", help="write <SOURCE>.csv.gz instead of <SOURCE>.csv")
     args = parser.parse_args(_join_bbox(argv))
 

@@ -44,7 +44,7 @@ def test_chunks_cover_every_day_exactly_once():
     assert all(1 <= n <= 5 for _, n in chunks)
     assert plan_chunks(date(2020, 1, 2), date(2020, 1, 1), 5) == []
     with pytest.raises(ValueError):
-        plan_chunks(date(2020, 1, 1), date(2020, 1, 9), 11)      # FIRMS documents DAY_RANGE 1..10
+        plan_chunks(date(2020, 1, 1), date(2020, 1, 9), 6)       # FIRMS accepts DAY_RANGE 1..5
 
 
 def test_intervals_merge_only_when_contiguous():
@@ -160,7 +160,7 @@ def test_one_command_pipeline_end_to_end_and_readme_block(tmp_path, monkeypatch)
     monkeypatch.delenv("PYRO_DEMO", raising=False)   # test_api.py forces demo mode for its own tests
     out = tmp_path / "firms"
     manifest = download((-124, 36, -119, 41), date(2018, 4, 1), date(2021, 12, 31), list(world["frames"]),
-                        str(out), SECRET, chunk_days=10, pause=0, backoff=0, session=WorldSession(),
+                        str(out), SECRET, chunk_days=5, pause=0, backoff=0, session=WorldSession(),
                         log=lambda *_: None)
     assert all(not v["failed_chunks"] for v in manifest["sources"].values())
     detections, loaded_manifest, info = load_dataset(str(out))
