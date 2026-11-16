@@ -2,6 +2,8 @@
 
 **A burning activity calendar that puts MODIS and VIIRS active-fire records on one scale, and shows how well that works.**
 
+**Why each region gets its own calibration.** With California’s NOAA-20 calibration applied to northern Australia, the reconstructed active-cell total was only 1.4% above Aqua MODIS across 81 months. Yet the median absolute monthly error was 22.7%. A calibration fitted in northern Australia had 6.2% median monthly error on held-out years. Across all 12 transfers, median monthly error was 21.8–55.0% with another region’s calibration and 5.8–14.7% with the local calibration. Positive and negative monthly errors can cancel in the total. These comparisons measure agreement with Aqua’s active-cell record. [Regional comparison](docs/robustness/REPORT.md) · [Benchmark data](docs/robustness/report.json)
+
 <p align="center">
   <a href="https://jeeson-kurian.github.io/pyro-harmonize/"><img src="https://img.shields.io/badge/%E2%96%B6%20LIVE%20DEMO-Open%20the%20dashboard-E8590C?style=for-the-badge" alt="Live demo: open the dashboard" height="40"></a>
 </p>
