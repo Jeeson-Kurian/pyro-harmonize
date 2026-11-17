@@ -214,6 +214,14 @@ We acknowledge the use of data from NASA's Fire Information for Resource Managem
 
 More in [docs/METHODS.md](docs/METHODS.md), section 11.
 
+## Engineering contributions
+
+**Project direction.** Jeeson Kurian requested a technical review of whether a change in satellite sensor could make the fire calendar appear to change. After the review identified weaknesses in cross-sensor matching and validation, he asked for a redesign. ChatGPT produced the audit. Claude implemented the revised scientific pipeline. The [design history](https://github.com/Jeeson-Kurian/pyro-harmonize/blob/1130fc9a136fd67576cbf95e5ac16f5abb9f45d5/docs/DESIGN_RATIONALE.md) records those roles.
+
+**Architecture and implementation.** The first version converted counts of clustered detections using a ratio. The redesign groups observations by platform, grid cell and local half-day before matching sensors. This lets several fine-resolution detections contribute one active cell while retaining the pixel count as a calibration input. Coverage determines whether an absent Aqua detection can be scored. [Scientific-core change](https://github.com/Jeeson-Kurian/pyro-harmonize/commit/694a04bc51df7ba3b1ff8c65336d3d7a83fe3d7e)
+
+**What the evaluation changed.** Transferring California’s NOAA-20 calibration to northern Australia produced a small total bias (+1.4%) alongside a much larger median monthly error (22.7%). The local calibration scored 6.2% on held-out years. That result supports fitting each region separately and reporting monthly error beside aggregate bias. Codex checked the published comparison against the stored results and documented it. [Robustness report](docs/robustness/REPORT.md) · [Documentation change](https://github.com/Jeeson-Kurian/pyro-harmonize/pull/2)
+
 ## Use of AI
 
 Parts of the code, tests and documentation in this repository were written with the assistance of an AI model (Claude, by Anthropic). No AI-generated images, video or audio are used: every chart, map and screenshot is drawn by this software from NASA FIRMS data. The data are NASA FIRMS data, or simulated data that are labelled as synthetic wherever they appear.
